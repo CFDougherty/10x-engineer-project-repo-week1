@@ -211,22 +211,3 @@ class TestCollections:
         response = client.get("/prompts")
         for prompt in response.json()["prompts"]:
             assert prompt["collection_id"] is None
-
-    def test_prevent_collection_deletion_if_prompts_exist(self, client: TestClient, sample_collection_data, sample_prompt_data):
-        """Prevent the deletion of a collection if prompts exist."""
-        # Create collection
-        col_response = client.post("/collections", json=sample_collection_data)
-        collection_id = col_response.json()["id"]
-
-        # Create prompt in collection
-        prompt_data = {**sample_prompt_data, "collection_id": collection_id}
-        client.post("/prompts", json=prompt_data)
-
-        # Attempt to delete collection
-        response = client.delete(f"/collections/{collection_id}")
-
-        # Verify deletion is prevented
-        assert response.status_code == 409  # Assuming 409 Conflict or similar is used
-        # Confirm collection still exists
-        response = client.get(f"/collections/{collection_id}")
-        assert response.status_code == 200
