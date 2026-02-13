@@ -177,3 +177,56 @@ class TestCollections:
             # Prompt exists with orphaned collection_id
             assert prompts[0]["collection_id"] == collection_id
             # After fix, collection_id should be None or prompt should be deleted
+    def test_delete_collection_also_deletes_prompts(self, client: TestClient, sample_collection_data, sample_prompt_data):
+        """Verify prompts are deleted when a collection is deleted."""
+        # Create collection
+        col_response = client.post("/collections", json=sample_collection_data)
+        collection_id = col_response.json()["id"]
+
+        # Create prompt in collection
+        prompt_data = {**sample_prompt_data, "collection_id": collection_id}
+        client.post("/prompts", json=prompt_data)
+
+        # Delete collection
+        client.delete(f"/collections/{collection_id}")
+
+        # Verify all prompts are deleted
+        response = client.get("/prompts")
+        assert response.json()["prompts"] == []
+
+    def test_delete_collection_sets_prompt_collection_id_to_none(self, client: TestClient, sample_collection_data, sample_prompt_data):
+        """Ensure prompts have collection_id set to None on collection deletion."""
+        # Create collection
+        col_response = client.post("/collections", json=sample_collection_data)
+        collection_id = col_response.json()["id"]
+
+        # Create prompt in collection
+        prompt_data = {**sample_prompt_data, "collection_id": collection_id}
+        client.post("/prompts", json=prompt_data)
+
+        # Delete collection
+        client.delete(f"/collections/{collection_id}")
+
+        # Verify prompts collection_id is None
+        response = client.get("/prompts")
+        for prompt in response.json()["prompts"]:
+            assert prompt["collection_id"] is None
+
+    def test_prevent_collection_deletion_if_prompts_exist(self, client: TestClient, sample_collection_data, sample_prompt_data):
+        """Prevent the deletion of a collection if prompts exist."""
+        # Create collection
+        col_response = client.post("/collections", json=sample_collection_data)
+        collection_id = col_response.json()["id"]
+
+        # Create prompt in collection
+        prompt_data = {**sample_prompt_data, "collection_id": collection_id}
+        client.post("/prompts", json=prompt_data)
+
+        # Attempt to delete collection
+        response = client.delete(f"/collections/{collection_id}")
+
+        # Verify deletion is prevented
+        assert response.status_code == 409  # Assuming 409 Conflict or similar is used
+        # Confirm collection still exists
+        response = client.get(f"/collections/{collection_id}")
+        assert response.status_code == 200
