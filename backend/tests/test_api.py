@@ -59,11 +59,6 @@ class TestPrompts:
         assert data["id"] == prompt_id
     
     def test_get_prompt_not_found(self, client: TestClient):
-        """Test that getting a non-existent prompt returns 404.
-        
-        NOTE: This test currently FAILS due to Bug #1!
-        The API returns 500 instead of 404.
-        """
         response = client.get("/prompts/nonexistent-id")
         # This should be 404, but there's a bug...
         assert response.status_code == 404  # Will fail until bug is fixed
@@ -103,9 +98,7 @@ class TestPrompts:
         data = response.json()
         assert data["title"] == "Updated Title"
         
-        # NOTE: This assertion will fail due to Bug #2!
-        # The updated_at should be different from original
-        # assert data["updated_at"] != original_updated_at  # Uncomment after fix
+        assert data["updated_at"] != original_updated_at  # Uncomment after fix
     
     def test_sorting_order(self, client: TestClient):
         """Test that prompts are sorted newest first.
@@ -260,3 +253,25 @@ class TestCollections:
         
         # Verify the data remains unchanged
         assert unchanged_data == original_data
+        
+    def test_patch_prompt_updates_timestamp(self, client: TestClient, sample_prompt_data):
+        # Create a prompt first
+        create_response = client.post("/prompts", json=sample_prompt_data)
+        prompt_id = create_response.json()["id"]
+        original_updated_at = create_response.json()["updated_at"]
+
+        # Small delay to ensure timestamp can change
+        import time
+        time.sleep(0.1)
+
+        # Partially update
+        partial_update_data = {
+            "title": "Updated Title"
+        }
+
+        response = client.patch(f"/prompts/{prompt_id}", json=partial_update_data)
+        assert response.status_code == 200
+        updated_data = response.json()
+
+        # Verify the updated_at timestamp has changed
+        assert updated_data["updated_at"] != original_updated_at

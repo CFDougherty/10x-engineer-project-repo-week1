@@ -136,11 +136,16 @@ def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(...)):
         if not collection:
             raise HTTPException(status_code=400, detail="Collection not found")
 
-    # Update the prompt, keeping existing values for fields not in the update
-    updated_prompt = existing.copy(
-        update={key: value for key, value in prompt_data.dict(exclude_unset=True).items()}
-    )
-
+    # Check for actual changes
+    updated_fields = prompt_data.dict(exclude_unset=True)
+    if updated_fields:
+        updated_prompt = existing.model_copy(
+            update=updated_fields
+        )
+        updated_prompt.updated_at = get_current_time()  # Update timestamp only if changes are made
+    else:
+        updated_prompt = existing  # No changes, keep the original
+    
     return storage.update_prompt(prompt_id, updated_prompt)
 
 
