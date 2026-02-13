@@ -8,4 +8,6 @@ Please examine the contests of backend, looking specifically at tests and app.
 
 When running the tests, some fail.
 
-Using the provided console logs, analyze the first failure, pointing out where the test failed in the main code, analyzing the failure mode, and propose 2 solutions, contrasting their strengths and weaknesses against standard good coding practice
+Using the provided console logs, analyze the first failure, pointing out where the test failed in the main code, analyzing the failure mode, and propose 2 solutions, contrasting their strengths and weaknesses against standard good coding practice.
+
+Proposed solutions should include well documented and well commented code blocks in line with google style docstrings

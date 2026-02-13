@@ -55,9 +55,19 @@ class Storage:
             return True
         return False
     
+    def delete_prompts_by_collection_id(self, collection_id: str) -> None:
+        # Collect IDs of prompts to delete
+        prompt_ids_to_delete = [prompt_id for prompt_id, prompt in self._prompts.items() if prompt.collection_id == collection_id]
+        
+        # Delete the prompts
+        for prompt_id in prompt_ids_to_delete:
+            del self._prompts[prompt_id]
+    
     def get_prompts_by_collection(self, collection_id: str) -> List[Prompt]:
         return [p for p in self._prompts.values() if p.collection_id == collection_id]
-    
+
+    def get_prompts_by_collection_id(self, collection_id: str) -> List[Prompt]:
+        return [prompt for prompt in self._prompts.values() if prompt.collection_id == collection_id]
     # ============== Utility ==============
     
     def clear(self):
