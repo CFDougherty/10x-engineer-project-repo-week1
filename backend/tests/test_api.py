@@ -211,3 +211,52 @@ class TestCollections:
         response = client.get("/prompts")
         for prompt in response.json()["prompts"]:
             assert prompt["collection_id"] is None
+            
+    def test_patch_prompt_partial_update(self, client: TestClient, sample_prompt_data):
+        # Create a prompt first
+        create_response = client.post("/prompts", json=sample_prompt_data)
+        prompt_id = create_response.json()["id"]
+        original_data = create_response.json()
+
+        # Partially update
+        partial_update_data = {
+            "title": "Partially Updated Title"
+        }
+
+        response = client.patch(f"/prompts/{prompt_id}", json=partial_update_data)
+        assert response.status_code == 200
+        updated_data = response.json()
+        
+        # Verify updated fields
+        assert updated_data["title"] == partial_update_data["title"]
+        
+        # Verify unchanged fields
+        assert updated_data["content"] == original_data["content"]
+        assert updated_data["description"] == original_data["description"]
+
+    def test_patch_prompt_non_existent(self, client: TestClient):
+        response = client.patch("/prompts/nonexistent-id", json={"title": "New Title"})
+        assert response.status_code == 404
+
+    def test_patch_prompt_invalid_collection(self, client: TestClient, sample_prompt_data):
+        # Create a prompt first
+        create_response = client.post("/prompts", json=sample_prompt_data)
+        prompt_id = create_response.json()["id"]
+
+        # Partially update with invalid collection_id
+        response = client.patch(f"/prompts/{prompt_id}", json={"collection_id": "invalid-collection-id"})
+        assert response.status_code == 400
+
+    def test_patch_prompt_empty_payload(self, client: TestClient, sample_prompt_data):
+        # Create a prompt first
+        create_response = client.post("/prompts", json=sample_prompt_data)
+        prompt_id = create_response.json()["id"]
+        original_data = create_response.json()
+
+        # Patch with empty payload
+        response = client.patch(f"/prompts/{prompt_id}", json={})
+        assert response.status_code == 200
+        unchanged_data = response.json()
+        
+        # Verify the data remains unchanged
+        assert unchanged_data == original_data

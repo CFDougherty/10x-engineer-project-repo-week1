@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from uuid import uuid4
-
+from pydantic import BaseModel, Field, field_validator
 
 def generate_id() -> str:
     return str(uuid4())
@@ -15,7 +15,19 @@ def get_current_time() -> datetime:
 
 
 # ============== Prompt Models ==============
+class PromptUpdateOptional(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    content: Optional[str] = Field(None, min_length=1)
+    description: Optional[str] = Field(None, max_length=500)
+    collection_id: Optional[str] = None
 
+    @field_validator('*', mode='before')
+    def check_empty_values(cls, v, info):
+        # Ensure that fields are not empty strings or only whitespace
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+    
 class PromptBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1)

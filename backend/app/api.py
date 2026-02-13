@@ -3,6 +3,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
+from fastapi import FastAPI, HTTPException, Path, Body
+from app.models import Prompt, PromptUpdateOptional
 
 from app.models import (
     Prompt, PromptCreate, PromptUpdate,
@@ -95,9 +97,7 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
         collection = storage.get_collection(prompt_data.collection_id)
         if not collection:
             raise HTTPException(status_code=400, detail="Collection not found")
-    
-    # BUG #2: We're not updating the updated_at timestamp!
-    # The updated prompt keeps the old timestamp
+
     updated_prompt = Prompt(
         id=existing.id,
         title=prompt_data.title,
@@ -111,8 +111,37 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
     return storage.update_prompt(prompt_id, updated_prompt)
 
 
-# NOTE: PATCH endpoint is missing! Students need to implement this.
-# It should allow partial updates (only update provided fields)
+@app.patch("/prompts/{prompt_id}", response_model=Prompt)
+def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(...)):
+    """
+    Partially update the specified prompt.
+    
+    Args:
+        prompt_id: The ID of the prompt to update.
+        prompt_data: The new data for the prompt. Only non-null fields will be updated.
+    
+    Returns:
+        The updated prompt.
+    
+    Raises:
+        HTTPException: If the prompt does not exist or if the collection_id is invalid.
+    """
+    existing = storage.get_prompt(prompt_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    # Validate new collection_id
+    if prompt_data.collection_id:
+        collection = storage.get_collection(prompt_data.collection_id)
+        if not collection:
+            raise HTTPException(status_code=400, detail="Collection not found")
+
+    # Update the prompt, keeping existing values for fields not in the update
+    updated_prompt = existing.copy(
+        update={key: value for key, value in prompt_data.dict(exclude_unset=True).items()}
+    )
+
+    return storage.update_prompt(prompt_id, updated_prompt)
 
 
 @app.delete("/prompts/{prompt_id}", status_code=204)
