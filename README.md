@@ -403,9 +403,45 @@ curl -i -X DELETE "http://localhost:8000/prompts/$PROMPT_ID"
 
 ### 7) Delete a collection
 
+`DELETE /collections/{collection_id}` deletes the collection **and all prompts** whose `collection_id` references it.
+
+> Notes:
+>
+> - Success response is `204 No Content`.
+> - If the collection does not exist, the API returns `404 {"detail":"Collection not found"}`.
+
+Standalone example (creates a temporary collection + prompt, deletes the collection, then verifies both the prompt and collection are gone):
+
 ```bash
-# Deletes the collection and its associated prompts (returns 204 No Content)
-curl -i -X DELETE http://localhost:8000/collections/<collection_id_here>
+# Requires: jq (preinstalled in GitHub Codespaces)
+set -euo pipefail
+
+BASE_URL="http://localhost:8000"
+
+COLLECTION_ID=$(curl -sS -X POST "$BASE_URL/collections" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Temp Collection","description":"Used for delete collection example"}' \
+  | jq -er .id)
+
+PROMPT_ID=$(curl -sS -X POST "$BASE_URL/prompts" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Temp Prompt","content":"Hello {{name}}","description":"Used for delete collection example","collection_id":"'"$COLLECTION_ID"'"}' \
+  | jq -er .id)
+
+echo
+echo "DELETE $BASE_URL/collections/$COLLECTION_ID"
+# Delete the collection (and prompts that reference it)
+curl -sS -i -X DELETE "$BASE_URL/collections/$COLLECTION_ID"
+
+echo
+echo "GET $BASE_URL/prompts/$PROMPT_ID (expect 404 {\"detail\":\"Prompt not found\"})"
+# Confirm the prompt is gone
+curl -sS -i "$BASE_URL/prompts/$PROMPT_ID"
+
+echo
+echo "GET $BASE_URL/collections/$COLLECTION_ID (expect 404 {\"detail\":\"Collection not found\"})"
+# Confirm the collection is gone
+curl -sS -i "$BASE_URL/collections/$COLLECTION_ID"
 ```
 
 ---
