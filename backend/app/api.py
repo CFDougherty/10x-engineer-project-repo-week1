@@ -17,6 +17,22 @@ from app.utils import sort_prompts_by_date, filter_prompts_by_collection, search
 from app import __version__
 
 
+"""Initialize the FastAPI application instance.
+
+Creates the central ASGI application object for PromptLab. The application is
+configured with basic OpenAPI metadata (title, description, version), which is
+used for generated API documentation and client integrations.
+
+Args:
+    None.
+
+Returns:
+    fastapi.FastAPI: A configured FastAPI application instance with OpenAPI
+    metadata set (title, description, version).
+
+Raises:
+    None.
+"""
 app = FastAPI(
     title="PromptLab API",
     description="AI Prompt Engineering Platform",
@@ -24,6 +40,30 @@ app = FastAPI(
 )
 
 # CORS middleware
+"""Configure Cross-Origin Resource Sharing (CORS) middleware for the application.
+
+This registers FastAPI/Starlette's :class:`~starlette.middleware.cors.CORSMiddleware`
+on the application instance to control how browsers handle cross-origin requests.
+
+The current configuration is fully permissive:
+- Allows requests from any origin (``allow_origins=["*"]``).
+- Allows cookies/authorization headers to be included (``allow_credentials=True``).
+- Allows all HTTP methods and headers (``allow_methods=["*"]``,
+  ``allow_headers=["*"]``).
+
+Note:
+    Using ``allow_origins=["*"]`` together with ``allow_credentials=True`` is not
+    valid under the CORS specification for credentialed browser requests; browsers
+    will typically reject such responses unless a specific origin is echoed back.
+    Prefer explicitly listing allowed origins when credentials are required.
+
+Args:
+    None: This block does not take parameters; it mutates the application by
+        adding middleware.
+
+Returns:
+    None: The middleware is registered for its side effects.
+"""
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,11 +77,16 @@ app.add_middleware(
 
 @app.get("/health", response_model=HealthResponse)
 def health_check():
-    """
-    Return the health status and version of the application.
+    """Returns the service health status and the running application version.
 
+    This endpoint is intended for use by load balancers, orchestration systems,
+    and monitoring tools to verify that the API process is running and to
+    retrieve the currently deployed version.
     Returns:
-        HealthResponse: The health status and version.
+        HealthResponse: A response object containing:
+            - status: Health status string (typically "healthy").
+            - version: The current application version.
+
     """
     return HealthResponse(status="healthy", version=__version__)
 
@@ -52,17 +97,23 @@ def health_check():
 def list_prompts(
     collection_id: Optional[str] = None,
     search: Optional[str] = None
-    ):
-    """Retrieve a list of prompts, optionally filtered by collection or search query.
+):
+    """Lists prompts, optionally filtered by collection and/or a search query.
     
+    This endpoint retrieves all prompts from storage, applies an optional
+    collection filter, applies an optional text search filter, then sorts the
+    resulting prompts by date (newest first).
+
     Args:
-        collection_id: Optional; The ID of the collection to filter prompts by.
-        search: Optional; The search term to filter prompts.
+        collection_id: Optional collection ID used to filter prompts. If
+            provided, only prompts belonging to this collection are returned.
+        search: Optional search term used to filter prompts. If provided, only
+            prompts matching the query are returned.
 
     Returns:
-        PromptList: An object containing the list of prompts and the total count.
+        A `PromptList` containing the resulting list of prompts and the total
+        number of prompts returned.
     """
-
     prompts = storage.get_all_prompts()
     
     # Filter by collection if specified
@@ -82,16 +133,17 @@ def list_prompts(
 
 @app.get("/prompts/{prompt_id}", response_model=Prompt)
 def get_prompt(prompt_id: str):
-    """Fetch a prompt by its ID.
+    """Retrieves a prompt by its unique identifier.
 
     Args:
-        prompt_id: The ID of the prompt to retrieve.
+        prompt_id (str): The unique ID of the prompt to retrieve.
 
     Returns:
-        The prompt associated with the given ID.
+        Prompt: The prompt associated with ``prompt_id``.
 
     Raises:
-        HTTPException: If no prompt is found with the given ID.
+        HTTPException: Raised with status code 404 if no prompt exists for the
+            given ``prompt_id``.
     """
     prompt = storage.get_prompt(prompt_id)
     
@@ -103,17 +155,21 @@ def get_prompt(prompt_id: str):
 
 @app.post("/prompts", response_model=Prompt, status_code=201)
 def create_prompt(prompt_data: PromptCreate):
-    """Create a new prompt and store it in the database.
+    """Creates a new prompt and persists it to storage.
+
+    If `prompt_data.collection_id` is provided, this endpoint validates that the
+    referenced collection exists before creating the prompt. If the collection
+    does not exist, a 400 error is returned.
 
     Args:
-        prompt_data: Data required to create a new prompt.
-
+        prompt_data (PromptCreate): Payload containing the fields required to
+            create a new prompt. If `collection_id` is provided, it must refer
+            to an existing collection.
     Returns:
-        The created prompt object.
-
+        Prompt: The newly created prompt as stored in the database.
     Raises:
-        HTTPException: If the specified collection does not exist.
-
+        HTTPException: Raised with status code 400 if `prompt_data.collection_id`
+            is provided but no matching collection is found.
     """
     # Validate collection exists if provided
     if prompt_data.collection_id:
@@ -127,6 +183,27 @@ def create_prompt(prompt_data: PromptCreate):
 
 @app.put("/prompts/{prompt_id}", response_model=Prompt)
 def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
+    """Update an existing prompt.
+
+    Retrieves the prompt identified by ``prompt_id`` and replaces its mutable fields
+    (title, content, description, collection_id) with the values provided in
+    ``prompt_data``. If ``collection_id`` is provided, this endpoint validates that
+    the referenced collection exists. The prompt's ``created_at`` timestamp is
+    preserved, and ``updated_at`` is set to the current time.
+
+    Args:
+        prompt_id: The unique identifier of the prompt to update.
+        prompt_data: The updated prompt fields. If ``collection_id`` is set, it must
+            reference an existing collection.
+
+    Returns:
+        The updated prompt as persisted by the storage layer.
+
+    Raises:
+        HTTPException: If no prompt exists for ``prompt_id`` (404).
+        HTTPException: If ``prompt_data.collection_id`` is provided but does not
+            correspond to an existing collection (400).
+    """
     existing = storage.get_prompt(prompt_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Prompt not found")
@@ -152,18 +229,24 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
 
 @app.patch("/prompts/{prompt_id}", response_model=Prompt)
 def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(...)):
-    """
-    Partially update the specified prompt.
+    """Partially updates an existing prompt.
     
+    This endpoint applies a partial update (PATCH semantics) to the prompt
+    identified by `prompt_id`. Only fields explicitly provided in `prompt_data`
+    are applied (unset fields are ignored). If `collection_id` is provided, it
+    is validated to ensure the referenced collection exists. The prompt's
+    `updated_at` timestamp is updated only when at least one field changes.
+
     Args:
-        prompt_id: The ID of the prompt to update.
-        prompt_data: The new data for the prompt. Only non-null fields will be updated.
-    
+        prompt_id: Unique identifier of the prompt to update.
+        prompt_data: Partial prompt payload. Only fields set in this object are
+            applied to the existing prompt.
     Returns:
-        The updated prompt.
-    
+        The persisted, updated prompt model after applying any requested changes.
+        If no fields are provided, the existing prompt is returned unchanged.
     Raises:
-        HTTPException: If the prompt does not exist or if the collection_id is invalid.
+        HTTPException: If the prompt does not exist (404), or if a provided
+            `collection_id` does not correspond to an existing collection (400).
     """
     existing = storage.get_prompt(prompt_id)
     if not existing:
@@ -190,16 +273,19 @@ def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(...)):
 
 @app.delete("/prompts/{prompt_id}", status_code=204)
 def delete_prompt(prompt_id: str):
-    """Delete a prompt with the given prompt ID.
+    """Deletes a prompt by its ID.
+
+    This endpoint deletes the prompt identified by `prompt_id`. If no prompt with
+    the given ID exists, it returns a 404 error.
 
     Args:
-        prompt_id: The ID of the prompt to delete.
+        prompt_id: The unique identifier of the prompt to delete.
+
+    Returns:
+        None. On success, the endpoint responds with HTTP 204 (No Content).
 
     Raises:
-        HTTPException: If the prompt is not found.
-    
-    Returns:
-        None
+        HTTPException: If the prompt does not exist (HTTP 404, "Prompt not found").
     """
     if not storage.delete_prompt(prompt_id):
         raise HTTPException(status_code=404, detail="Prompt not found")
@@ -210,10 +296,14 @@ def delete_prompt(prompt_id: str):
 
 @app.get("/collections", response_model=CollectionList)
 def list_collections():
-    """Retrieve and return a list of all collections.
+    """Lists all collections.
 
+    Retrieves all collections from storage and returns them along with the total
+    number of collections.
     Returns:
-        CollectionList: An object containing the collections and their total count.
+        CollectionList: Response object containing:
+            - collections: The list of all collections.
+            - total: The total number of collections returned.
     """
     collections = storage.get_all_collections()
     return CollectionList(collections=collections, total=len(collections))
@@ -221,16 +311,19 @@ def list_collections():
 
 @app.get("/collections/{collection_id}", response_model=Collection)
 def get_collection(collection_id: str):
-    """Retrieve a collection by its ID.
+    """Retrieves a collection by its ID.
+
+    Looks up the collection in storage using the provided identifier and returns
+    it if found. If no matching collection exists, raises an HTTP 404 error.
 
     Args:
-        collection_id: The ID of the collection to retrieve.
+        collection_id (str): The ID of the collection to retrieve.
 
     Returns:
-        The requested collection.
+        Collection: The requested collection.
 
     Raises:
-        HTTPException: If the collection is not found.
+        HTTPException: If the collection is not found (HTTP 404).
     """
     collection = storage.get_collection(collection_id)
     if not collection:
@@ -240,14 +333,18 @@ def get_collection(collection_id: str):
 
 @app.post("/collections", response_model=Collection, status_code=201)
 def create_collection(collection_data: CollectionCreate):
-    """
-    Create a new collection.
+    """Creates a new collection.
+
+    Constructs a `Collection` model instance from the incoming request payload
+    and persists it using the storage layer.
 
     Args:
-        collection_data: The data required to create a new collection.
+        collection_data (CollectionCreate): Request payload containing the
+            fields required to create a new collection.
 
     Returns:
-        A newly created Collection object.
+        Collection: The newly created collection as persisted by the storage
+            layer.
     """
     collection = Collection(**collection_data.model_dump())
     return storage.create_collection(collection)
@@ -255,17 +352,21 @@ def create_collection(collection_data: CollectionCreate):
 
 @app.delete("/collections/{collection_id}", status_code=204)
 def delete_collection(collection_id: str):
-    """
-    Delete a collection and its associated prompts.
+    """Deletes a collection and all prompts associated with it.
+
+    This endpoint removes every prompt that belongs to the specified collection,
+    then deletes the collection itself. If the collection does not exist, a
+    404 HTTPException is raised.
 
     Args:
-        collection_id: The ID of the collection to delete.
+        collection_id (str): The ID of the collection to delete.
 
     Raises:
         HTTPException: If the collection is not found.
 
     Returns:
-        None
+        None: Always returns ``None``. The endpoint responds with HTTP 204 (No Content)
+        on success.
     """
     # Retrieve prompts in the collection
     prompts = storage.get_prompts_by_collection_id(collection_id)
