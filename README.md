@@ -1,169 +1,187 @@
 # PromptLab
 
-**Your AI Prompt Engineering Platform**
+AI Prompt Engineering Platform — store, organize, version, and test prompt templates for your team.
+
+PromptLab is a lightweight FastAPI backend (frontend planned) that lets AI engineers manage:
+
+- Prompt templates with variables (e.g. `{{input}}`, `{{context}}`)
+- Collections (group prompts by project)
+- Search and filtering
+- Versioning/tagging (planned in upcoming weeks)
 
 ---
 
-## Welcome to the Team! 👋
+## Project Overview
 
-Congratulations on joining the PromptLab engineering team! You've been brought on to help us build the next generation of prompt engineering tools.
-
-### What is PromptLab?
-
-PromptLab is an internal tool for AI engineers to **store, organize, and manage their prompts**. Think of it as a "Postman for Prompts" — a professional workspace where teams can:
-
-- 📝 Store prompt templates with variables (`{{input}}`, `{{context}}`)
-- 📁 Organize prompts into collections
-- 🏷️ Tag and search prompts
-- 📜 Track version history
-- 🧪 Test prompts with sample inputs
-
-### The Current Situation
-
-The previous developer left us with a *partially working* backend. The core structure is there, but:
-
-- There are **several bugs** that need fixing
-- Some **features are incomplete**
-- The **documentation is minimal** (you'll fix that)
-- There are **no tests** worth mentioning
-- **No CI/CD pipeline** exists
-- **No frontend** has been built yet
-
-Your job over the next 4 weeks is to transform this into a **production-ready, full-stack application**.
+PromptLab acts like a “Postman for prompts”: a shared workspace to create prompts, keep them organized, and retrieve/update them via a simple REST API.
 
 ---
 
-## Quick Start
+## Installation & Setup
 
 ### Prerequisites
 
 - Python 3.10+
-- Node.js 18+ (for Week 4)
 - Git
 
-### Run Locally
+### Run locally
 
 ```bash
 # Clone the repo
 git clone <your-repo-url>
 cd promptlab
 
-# Set up backend
+# (Recommended) create & activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate
+
+# Install backend dependencies
 cd backend
 pip install -r requirements.txt
+
+# Start the API server
 python main.py
 ```
 
-API runs at: http://localhost:8000
+- API base URL: `http://localhost:8000`
+- Interactive Swagger docs: `http://localhost:8000/docs`
 
-API docs at: http://localhost:8000/docs
-
-### Run Tests
+### Run tests
 
 ```bash
 cd backend
-pytest tests/ -v
+pytest -v
+```
+
+---
+
+## API Summary
+
+All endpoints are served from the base URL (`http://localhost:8000`).
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/health` | Health check |
+| GET | `/prompts` | List prompts (optional `collection_id`, `search`) |
+| GET | `/prompts/{prompt_id}` | Get a single prompt by ID |
+| POST | `/prompts` | Create a new prompt |
+| PUT | `/prompts/{prompt_id}` | Replace an existing prompt |
+| PATCH | `/prompts/{prompt_id}` | Partially update an existing prompt |
+| DELETE | `/prompts/{prompt_id}` | Delete a prompt |
+| GET | `/collections` | List collections |
+| GET | `/collections/{collection_id}` | Get a single collection by ID |
+| POST | `/collections` | Create a new collection |
+| DELETE | `/collections/{collection_id}` | Delete a collection (and its prompts) |
+
+---
+
+## Usage Examples
+
+Examples below use `curl` and assume the server is running at `http://localhost:8000`.
+
+### 1) Health check
+
+```bash
+curl -s http://localhost:8000/health
+```
+
+### 2) Create a collection
+
+```bash
+curl -s -X POST http://localhost:8000/collections \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Onboarding",
+    "description": "Prompts used during onboarding"
+  }'
+```
+
+### 3) List collections
+
+```bash
+curl -s http://localhost:8000/collections
+```
+
+### 4) Create a prompt
+
+```bash
+curl -s -X POST http://localhost:8000/prompts \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title": "Summarize content",
+    "content": "Summarize the following text for a non-technical audience: {{input}}",
+    "description": "General-purpose summarization prompt",
+    "collection_id": "<collection_id_here>"
+  }'
+```
+
+### 5) List prompts (filter + search)
+
+```bash
+# Filter by collection
+curl -s "http://localhost:8000/prompts?collection_id=<collection_id_here>"
+
+# Search by text in title/description
+curl -s "http://localhost:8000/prompts?search=summarize"
+```
+
+### 6) Get / update / delete a prompt
+
+```bash
+# Get
+curl -s http://localhost:8000/prompts/<prompt_id_here>
+
+# Replace (PUT)
+curl -s -X PUT http://localhost:8000/prompts/<prompt_id_here> \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title": "Summarize content (v2)",
+    "content": "Summarize: {{input}}\n\nKeep it under 5 bullets.",
+    "description": "Updated constraints",
+    "collection_id": "<collection_id_here>"
+  }'
+
+# Partial update (PATCH) - only send fields you want to change
+curl -s -X PATCH http://localhost:8000/prompts/<prompt_id_here> \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "description": "Now optimized for bullet summaries"
+  }'
+
+# Delete (returns 204 No Content)
+curl -i -X DELETE http://localhost:8000/prompts/<prompt_id_here>
+```
+
+### 7) Delete a collection
+
+```bash
+# Deletes the collection and its associated prompts (returns 204 No Content)
+curl -i -X DELETE http://localhost:8000/collections/<collection_id_here>
 ```
 
 ---
 
 ## Project Structure
 
-```
+```text
 promptlab/
-├── README.md                    # You are here
-├── PROJECT_BRIEF.md             # Your assignment details
-├── GRADING_RUBRIC.md            # How you'll be graded
-│
-├── backend/
+├── backend/                 # FastAPI application
 │   ├── app/
-│   │   ├── __init__.py
-│   │   ├── api.py              # FastAPI routes (has bugs!)
-│   │   ├── models.py           # Pydantic models
-│   │   ├── storage.py          # In-memory storage
-│   │   └── utils.py            # Helper functions
-│   ├── tests/
-│   │   ├── __init__.py
-│   │   ├── test_api.py         # Basic tests
-│   │   └── conftest.py         # Test fixtures
-│   ├── main.py                 # Entry point
-│   └── requirements.txt
-│
-├── frontend/                    # You'll create this in Week 4
-├── specs/                       # You'll create this in Week 2
-├── docs/                        # You'll create this in Week 2
-└── .github/                     # You'll set up CI/CD in Week 3
+│   │   ├── api.py           # Routes/endpoints
+│   │   ├── models.py        # Pydantic models
+│   │   ├── storage.py       # In-memory storage
+│   │   └── utils.py         # Helper functions
+│   ├── tests/               # pytest tests
+│   └── main.py              # API entrypoint
+├── docs/                    # Documentation (Week 2)
+├── specs/                   # Feature specs (Week 2)
+└── frontend/                # Frontend (Week 4)
 ```
-
----
-
-## Your Mission
-
-### 🧪 Experimentation Encouraged!
-While we provide guidelines, **you are the engineer**. If you see a better way to solve a problem using AI, do it!
-- Want to swap the storage layer for a real database? **Go for it.**
-- Want to add Authentication? **Do it.**
-- Want to rewrite the API in a different style? **As long as tests pass, you're clear.**
-
-The goal is to learn how to build *better* software *faster* with AI. Don't be afraid to break things and rebuild them better.
-
-### Week 1: Fix the Backend
-- Understand this codebase using AI
-- Find and fix the bugs
-- Implement missing features
-
-### Week 2: Document Everything
-- Write proper documentation
-- Create feature specifications
-- Set up coding standards
-
-### Week 3: Make it Production-Ready
-- Write comprehensive tests
-- Implement new features with TDD
-- Set up CI/CD and Docker
-
-### Week 4: Build the Frontend
-- Create a React frontend
-- Connect it to the backend
-- Polish the user experience
-
----
-
-## API Endpoints (Current)
-
-| Method | Endpoint | Description | Status |
-|--------|----------|-------------|--------|
-| GET | `/health` | Health check | ✅ Works |
-| GET | `/prompts` | List all prompts | ⚠️ Has issues |
-| GET | `/prompts/{id}` | Get single prompt | ❌ Bug |
-| POST | `/prompts` | Create prompt | ✅ Works |
-| PUT | `/prompts/{id}` | Update prompt | ⚠️ Has issues |
-| DELETE | `/prompts/{id}` | Delete prompt | ✅ Works |
-| GET | `/collections` | List collections | ✅ Works |
-| GET | `/collections/{id}` | Get collection | ✅ Works |
-| POST | `/collections` | Create collection | ✅ Works |
-| DELETE | `/collections/{id}` | Delete collection | ❌ Bug |
 
 ---
 
 ## Tech Stack
 
-- **Backend**: Python 3.10+, FastAPI, Pydantic
-- **Frontend**: React, Vite (Week 4)
+- **Backend**: FastAPI, Pydantic
 - **Testing**: pytest
-- **DevOps**: Docker, GitHub Actions (Week 3)
-
----
-
-## Need Help?
-
-1. **Use AI tools** — This is an AI-assisted coding course!
-2. Read the `PROJECT_BRIEF.md` for detailed instructions
-3. Check `GRADING_RUBRIC.md` to understand expectations
-4. Ask questions in the course forum
-
----
-
-Good luck, and welcome to the team! 🚀
-
-
+- **Storage**: in-memory (planned to evolve)
