@@ -22,6 +22,8 @@ Given this snippet of documentation in README.md, I want you to perform the foll
 
 - Any provided code snippest must be tested
 
+- Examples should be standalone and not reliant on previous steps. For generating sample outputs, you may use any other API calls or sample data as needed. However, provided snippets should not be in powershell syntax with $VARIABLE names which create dependencies in examples
+
 - You are not to modify any files or code outside of README.md
 
 

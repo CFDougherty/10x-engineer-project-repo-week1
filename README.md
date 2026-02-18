@@ -24,6 +24,24 @@ PromptLab acts like a “Postman for prompts”: a shared workspace to create pr
 - Python 3.10+
 - Git
 
+### Run in GitHub Codespaces
+
+GitHub Codespaces forwards port `8000` automatically (see the **Ports** tab).
+
+If the devcontainer setup did not install dependencies, install them from the repository root:
+
+```bash
+python -m pip install -r backend/requirements.txt
+```
+
+Then start the API server:
+
+```bash
+cd backend
+python main.py
+# or: uvicorn app.api:app --reload --host 0.0.0.0 --port 8000
+```
+
 ### Run locally
 
 ```bash
@@ -128,6 +146,46 @@ Examples below use `curl` and assume the server is running at `http://localhost:
 
 Tip: pipe responses to `jq` for readability (e.g. `... | jq`).
 
+### 0) (Optional) Seed sample data
+
+If you want something to query right away, run the following to create 2 collections and 3 prompts.
+
+> Note: storage is in-memory; restarting the server clears this data.
+
+```bash
+# Requires: jq (preinstalled in GitHub Codespaces)
+ONBOARDING_ID=$(curl -sS -X POST http://localhost:8000/collections \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Onboarding","description":"Prompts used during onboarding"}' \
+  | jq -r .id)
+
+MARKETING_ID=$(curl -sS -X POST http://localhost:8000/collections \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Marketing","description":"Prompts used by marketing"}' \
+  | jq -r .id)
+
+curl -sS -X POST http://localhost:8000/prompts \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Summarize content","content":"Summarize the following text for a non-technical audience: {{input}}","description":"General-purpose summarization prompt","collection_id":"'"$ONBOARDING_ID"'"}' \
+  >/dev/null
+
+curl -sS -X POST http://localhost:8000/prompts \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Summarize meeting notes","content":"Summarize these meeting notes into action items: {{notes}}","description":"Summarize and extract action items"}' \
+  >/dev/null
+
+curl -sS -X POST http://localhost:8000/prompts \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Write ad copy","content":"Write 3 ad variants for: {{product}}. Tone: {{tone}}","description":"Paid social ads","collection_id":"'"$MARKETING_ID"'"}' \
+  >/dev/null
+
+echo "ONBOARDING_ID=$ONBOARDING_ID"
+echo "MARKETING_ID=$MARKETING_ID"
+
+# Sanity check
+curl -sS "http://localhost:8000/prompts?search=summarize" | jq
+```
+
 ### 1) Health check
 
 ```bash
@@ -213,29 +271,13 @@ After you create one or more collections (and optionally prompts that reference 
 }
 ```
 
-> Note: `/collections` returns collection metadata only. To list the prompts “inside” a collection, use `GET /prompts?collection_id=<collection_id_here>`.
+> Note: `/collections` returns collection metadata only. To list the prompts “inside” a collection, use `GET /prompts?collection_id=<collection_id_here>` (or any collection UUID).
 
 ### 4) Create a prompt
 
 `collection_id` is optional. If you include it, it must be an existing collection UUID (otherwise you'll get `{"detail":"Collection not found"}`).
 
-If you ran step 2, you can reuse `$COLLECTION_ID` and capture the created prompt ID for later steps:
-
-```bash
-curl -s -X POST http://localhost:8000/prompts \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "title": "Summarize content",
-    "content": "Summarize the following text for a non-technical audience: {{input}}",
-    "description": "General-purpose summarization prompt",
-    "collection_id": "'"$COLLECTION_ID"'"
-  }' \
-  | jq -r .id)
-
-echo "PROMPT_ID=$PROMPT_ID"
-```
-
-Or create a prompt without assigning it to a collection:
+Create a prompt without assigning it to a collection:
 
 ```bash
 curl -sS -X POST http://localhost:8000/prompts \
@@ -248,41 +290,115 @@ curl -sS -X POST http://localhost:8000/prompts \
   | jq
 ```
 
+Create a prompt and assign it to a new collection (standalone; captures IDs for later use):
+
+```bash
+# Requires: jq (preinstalled in GitHub Codespaces)
+COLLECTION_ID=$(curl -sS -X POST http://localhost:8000/collections \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Onboarding","description":"Prompts used during onboarding"}' \
+  | jq -r .id)
+
+PROMPT_ID=$(curl -sS -X POST http://localhost:8000/prompts \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title": "Summarize content",
+    "content": "Summarize the following text for a non-technical audience: {{input}}",
+    "description": "General-purpose summarization prompt",
+    "collection_id": "'"$COLLECTION_ID"'"
+  }' \
+  | jq -r .id)
+
+echo "COLLECTION_ID=$COLLECTION_ID"
+echo "PROMPT_ID=$PROMPT_ID"
+```
+
 ### 5) List prompts (filter + search)
+
+`GET /prompts` returns an object with `{ "prompts": [...], "total": <number> }`.
 
 ```bash
 # Filter by collection
-curl -s "http://localhost:8000/prompts?collection_id=<collection_id_here>"
+curl -sS "http://localhost:8000/prompts?collection_id=<collection_id_here>" | jq
 
-# Search by text in title/description
-curl -s "http://localhost:8000/prompts?search=summarize"
+# Search by text in title/description (case-insensitive)
+curl -sS "http://localhost:8000/prompts?search=summarize" | jq
+
+# You can combine filters
+curl -sS "http://localhost:8000/prompts?collection_id=<collection_id_here>&search=summarize" | jq
+```
+
+Example response (truncated):
+
+```json
+{
+  "prompts": [
+    {
+      "id": "...",
+      "title": "Summarize content",
+      "content": "...",
+      "description": "General-purpose summarization prompt",
+      "collection_id": "...",
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 1
+}
 ```
 
 ### 6) Get / update / delete a prompt
 
-```bash
-# Get
-curl -s http://localhost:8000/prompts/<prompt_id_here>
+The commands below are **standalone**: they create a temporary collection + prompt, then demonstrate `GET`, `PUT`, `PATCH`, and `DELETE`.
 
-# Replace (PUT)
-curl -s -X PUT http://localhost:8000/prompts/<prompt_id_here> \
+> Notes:
+>
+> - `PUT /prompts/{prompt_id}` is a **full replace**. If you omit optional fields like `description` or `collection_id`, they will be set to `null`.
+> - `PATCH /prompts/{prompt_id}` is a **partial update**. Send only the fields you want to change.
+
+```bash
+# Requires: jq (preinstalled in GitHub Codespaces)
+
+# Create a collection (optional) and a prompt so we have IDs to work with.
+COLLECTION_ID=$(curl -sS -X POST http://localhost:8000/collections \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Demo Collection","description":"Used for prompt CRUD example"}' \
+  | jq -r .id)
+
+PROMPT_ID=$(curl -sS -X POST http://localhost:8000/prompts \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title": "Summarize content",
+    "content": "Summarize: {{input}}",
+    "description": "Initial version",
+    "collection_id": "'"$COLLECTION_ID"'"
+  }' \
+  | jq -r .id)
+
+echo "PROMPT_ID=$PROMPT_ID"
+
+# Get
+curl -sS "http://localhost:8000/prompts/$PROMPT_ID" | jq
+
+# Replace (PUT) - include collection_id if you want to keep it assigned
+curl -sS -X PUT "http://localhost:8000/prompts/$PROMPT_ID" \
   -H 'Content-Type: application/json' \
   -d '{
     "title": "Summarize content (v2)",
     "content": "Summarize: {{input}}\n\nKeep it under 5 bullets.",
     "description": "Updated constraints",
-    "collection_id": "<collection_id_here>"
-  }'
+    "collection_id": "'"$COLLECTION_ID"'"
+  }' \
+  | jq
 
 # Partial update (PATCH) - only send fields you want to change
-curl -s -X PATCH http://localhost:8000/prompts/<prompt_id_here> \
+curl -sS -X PATCH "http://localhost:8000/prompts/$PROMPT_ID" \
   -H 'Content-Type: application/json' \
-  -d '{
-    "description": "Now optimized for bullet summaries"
-  }'
+  -d '{"description":"Now optimized for bullet summaries"}' \
+  | jq
 
 # Delete (returns 204 No Content)
-curl -i -X DELETE http://localhost:8000/prompts/<prompt_id_here>
+curl -i -X DELETE "http://localhost:8000/prompts/$PROMPT_ID"
 ```
 
 ### 7) Delete a collection
