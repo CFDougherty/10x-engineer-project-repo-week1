@@ -57,21 +57,62 @@ pytest -v
 
 ## API Summary
 
-All endpoints are served from the base URL (`http://localhost:8000`).
+- Base URL: `http://localhost:8000`
+- Swagger UI: `http://localhost:8000/docs`
+- OpenAPI spec: `http://localhost:8000/openapi.json`
 
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/health` | Health check |
-| GET | `/prompts` | List prompts (optional `collection_id`, `search`) |
-| GET | `/prompts/{prompt_id}` | Get a single prompt by ID |
-| POST | `/prompts` | Create a new prompt |
-| PUT | `/prompts/{prompt_id}` | Replace an existing prompt |
-| PATCH | `/prompts/{prompt_id}` | Partially update an existing prompt |
-| DELETE | `/prompts/{prompt_id}` | Delete a prompt |
-| GET | `/collections` | List collections |
-| GET | `/collections/{collection_id}` | Get a single collection by ID |
-| POST | `/collections` | Create a new collection |
-| DELETE | `/collections/{collection_id}` | Delete a collection (and its prompts) |
+### Endpoints
+
+| Method | Endpoint | Success | Notes |
+|---|---|---:|---|
+| GET | `/health` | 200 | Returns `{ "status": "healthy", "version": "…" }` |
+| GET | `/prompts` | 200 | Returns `{ prompts: Prompt[], total: number }`. Optional query params: `collection_id` (exact match), `search` (matches **title** and **description**). |
+| GET | `/prompts/{prompt_id}` | 200 | 404 if not found |
+| POST | `/prompts` | 201 | 400 if `collection_id` is provided but does not exist |
+| PUT | `/prompts/{prompt_id}` | 200 | Full replace (requires at least `title` and `content`). 404 if not found. 400 if `collection_id` is invalid |
+| PATCH | `/prompts/{prompt_id}` | 200 | Partial update (send only fields you want to change). Empty `{}` leaves the resource unchanged. 404 if not found. 400 if `collection_id` is invalid |
+| DELETE | `/prompts/{prompt_id}` | 204 | 404 if not found |
+| GET | `/collections` | 200 | Returns `{ collections: Collection[], total: number }` |
+| GET | `/collections/{collection_id}` | 200 | 404 if not found |
+| POST | `/collections` | 201 |  |
+| DELETE | `/collections/{collection_id}` | 204 | Deletes the collection **and all prompts** that reference it. 404 if not found |
+
+### Data model notes
+
+- IDs are server-generated UUIDv4 strings (e.g. `"d010f7fa-10a5-4d1f-9b16-2dc2c75eafd3"`).
+- Timestamps are generated using `datetime.utcnow()` and serialized as ISO-8601 strings **without** a timezone offset (e.g. `"2026-02-18T18:24:20.454842"`). Treat them as UTC.
+- `id`, `created_at`, and `updated_at` are read-only response fields; they are not accepted in create/update request bodies.
+
+`Prompt` shape (response):
+
+```json README.md
+{
+  "id": "uuid",
+  "title": "string",
+  "content": "string",
+  "description": "string | null",
+  "collection_id": "uuid | null",
+  "created_at": "2026-02-18T18:24:20.454842",
+  "updated_at": "2026-02-18T18:24:20.454844"
+}
+```
+
+`Collection` shape (response):
+
+```json README.md
+{
+  "id": "uuid",
+  "name": "string",
+  "description": "string | null",
+  "created_at": "2026-02-18T18:24:20.452339"
+}
+```
+
+> Note: Collections currently do not have an `updated_at` field.
+
+### Persistence
+
+Storage is **in-memory** (`backend/app/storage.py`). Restarting the server clears all prompts and collections.
 
 ---
 
