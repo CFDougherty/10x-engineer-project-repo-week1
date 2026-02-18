@@ -27,3 +27,5 @@ Given this snippet of documentation in README.md, I want you to perform the foll
 
 
 If there is any ambiguity, please ask follow up questions until there is an >80% understanding of the problem before continuing
+
+When your evaluations are complete, please check if the server is stopped and stop it if needed. Validate once complete.

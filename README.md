@@ -37,14 +37,17 @@ source .venv/bin/activate
 
 # Install backend dependencies
 cd backend
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 # Start the API server
-python main.py
+# NOTE: run from the backend/ directory so the `app` module can be imported.
+uvicorn app.api:app --reload --host 0.0.0.0 --port 8000
 ```
 
 - API base URL: `http://localhost:8000`
 - Interactive Swagger docs: `http://localhost:8000/docs`
+
+**GitHub Codespaces note:** if you open the Swagger UI in your browser, use the forwarded URL shown in the Codespaces **Ports** tab (port `8000`) and append `/docs` (e.g. `https://<your-codespace>-8000.app.github.dev/docs`). From the Codespaces terminal, `http://localhost:8000` works.
 
 ### Run tests
 
@@ -120,21 +123,57 @@ Storage is **in-memory** (`backend/app/storage.py`). Restarting the server clear
 
 Examples below use `curl` and assume the server is running at `http://localhost:8000`.
 
+- If you run these commands **inside** a GitHub Codespace, `http://localhost:8000` works.
+- If you call the API from your **browser** or your **local machine**, use the forwarded URL shown in the Codespaces **Ports** tab (port `8000`).
+
+Tip: pipe responses to `jq` for readability (e.g. `... | jq`).
+
 ### 1) Health check
 
 ```bash
 curl -s http://localhost:8000/health
 ```
 
+Expected response:
+
+```json
+{
+  "status": "healthy",
+  "version": "0.1.0"
+}
+```
+
 ### 2) Create a collection
 
 ```bash
-curl -s -X POST http://localhost:8000/collections \
+curl -sS -X POST http://localhost:8000/collections \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Onboarding",
     "description": "Prompts used during onboarding"
   }'
+```
+
+Expected response (example):
+
+```json
+{
+  "name": "Onboarding",
+  "description": "Prompts used during onboarding",
+  "id": "e2d1cfef-53b9-4920-a7ad-9fcb1c01b910",
+  "created_at": "2026-02-18T19:19:33.340310"
+}
+```
+
+To reuse the collection ID in later examples:
+
+```bash
+COLLECTION_ID=$(curl -sS -X POST http://localhost:8000/collections \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Onboarding","description":"Prompts used during onboarding"}' \
+  | jq -r .id)
+
+echo "COLLECTION_ID=$COLLECTION_ID"
 ```
 
 ### 3) List collections
@@ -143,7 +182,44 @@ curl -s -X POST http://localhost:8000/collections \
 curl -s http://localhost:8000/collections
 ```
 
+If you haven't created any collections yet, you'll see:
+
+```json
+{
+  "collections": [],
+  "total": 0
+}
+```
+
+After you create one or more collections (and optionally prompts that reference them), you’ll see something like this (example):
+
+```json
+{
+  "collections": [
+    {
+      "name": "Onboarding",
+      "description": "Prompts used during onboarding",
+      "id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
+      "created_at": "2026-02-18T19:51:56.546992"
+    },
+    {
+      "name": "Marketing",
+      "description": null,
+      "id": "38d3aa4c-a82b-442d-aa64-370f34113878",
+      "created_at": "2026-02-18T19:52:20.828994"
+    }
+  ],
+  "total": 2
+}
+```
+
+> Note: `/collections` returns collection metadata only. To list the prompts “inside” a collection, use `GET /prompts?collection_id=<collection_id_here>`.
+
 ### 4) Create a prompt
+
+`collection_id` is optional. If you include it, it must be an existing collection UUID (otherwise you'll get `{"detail":"Collection not found"}`).
+
+If you ran step 2, you can reuse `$COLLECTION_ID` and capture the created prompt ID for later steps:
 
 ```bash
 curl -s -X POST http://localhost:8000/prompts \
@@ -152,8 +228,24 @@ curl -s -X POST http://localhost:8000/prompts \
     "title": "Summarize content",
     "content": "Summarize the following text for a non-technical audience: {{input}}",
     "description": "General-purpose summarization prompt",
-    "collection_id": "<collection_id_here>"
-  }'
+    "collection_id": "'"$COLLECTION_ID"'"
+  }' \
+  | jq -r .id)
+
+echo "PROMPT_ID=$PROMPT_ID"
+```
+
+Or create a prompt without assigning it to a collection:
+
+```bash
+curl -sS -X POST http://localhost:8000/prompts \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title": "Summarize content",
+    "content": "Summarize the following text for a non-technical audience: {{input}}",
+    "description": "General-purpose summarization prompt"
+  }' \
+  | jq
 ```
 
 ### 5) List prompts (filter + search)
