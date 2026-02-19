@@ -151,6 +151,104 @@ All fields optional. Empty or whitespace-only strings are normalized to `null`.
 
 ## Endpoints
 
+### Documentation
+
+#### GET `/docs`
+Interactive Swagger UI for exploring and testing the API in a browser.
+
+**Request**
+
+- No parameters
+- No body
+
+**curl**
+
+```bash
+curl -sS -i http://localhost:8000/docs
+```
+
+**fetch**
+
+```javascript
+const res = await fetch('http://localhost:8000/docs');
+const html = await res.text();
+console.log(res.status);
+console.log(html.slice(0, 200));
+```
+
+**Success response — 200**
+
+- Content-Type: `text/html; charset=utf-8`
+
+**Response body (truncated example)**
+
+```html
+<!DOCTYPE html>
+<html>
+  <head>
+    <link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@.../swagger-ui.css">
+    <title>PromptLab API - Swagger UI</title>
+    <!-- ... -->
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <!-- ... -->
+  </body>
+</html>
+```
+
+---
+
+#### GET `/openapi.json`
+OpenAPI schema (JSON) for the running API.
+
+**Request**
+
+- No parameters
+- No body
+
+**curl**
+
+```bash
+curl -sS http://localhost:8000/openapi.json
+```
+
+**fetch**
+
+```javascript
+const res = await fetch('http://localhost:8000/openapi.json');
+const schema = await res.json();
+console.log(schema.openapi);
+console.log(Object.keys(schema.paths));
+```
+
+**Success response — 200**
+
+**Response body (sample)**
+
+```json
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "PromptLab API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
 ### Health
 
 #### GET `/health`
@@ -180,6 +278,10 @@ console.log(data);
 ```json
 { "status": "healthy", "version": "0.1.0" }
 ```
+
+**Errors**
+
+- `500 Internal Server Error` (unexpected)
 
 ---
 
@@ -238,6 +340,10 @@ console.log(data);
   "total": 1
 }
 ```
+
+**Errors**
+
+- `500 Internal Server Error` (unexpected)
 
 ---
 
@@ -347,7 +453,20 @@ console.log(await res.json());
 { "detail": "Collection not found" }
 ```
 
-- `422 Unprocessable Entity` (invalid body)
+- `422 Unprocessable Entity` (invalid body; example: missing `title`)
+
+```json
+{
+  "detail": [
+    {
+      "type": "missing",
+      "loc": ["body", "title"],
+      "msg": "Field required",
+      "input": { "content": "Summarize: {{input}}" }
+    }
+  ]
+}
+```
 
 ---
 
@@ -414,4 +533,352 @@ console.log(await res.json());
 
 **Errors**
 
-- `404 Not Found
+- `404 Not Found`
+
+```json
+{ "detail": "Prompt not found" }
+```
+
+- `400 Bad Request` (when `collection_id` is provided but does not exist)
+
+```json
+{ "detail": "Collection not found" }
+```
+
+- `422 Unprocessable Entity` (invalid body; example: missing `content`)
+
+```json
+{
+  "detail": [
+    {
+      "type": "missing",
+      "loc": ["body", "content"],
+      "msg": "Field required",
+      "input": { "title": "Summarize content (v2)" }
+    }
+  ]
+}
+```
+
+---
+
+#### PATCH `/prompts/{prompt_id}`
+Partially update an existing prompt.
+
+Notes:
+- Only fields you send are updated; omitted fields remain unchanged.
+- Empty or whitespace-only strings are normalized to `null`.
+- Sending an empty JSON object (`{}`) returns the prompt unchanged.
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---:|---|
+| `prompt_id` | string | yes | Prompt UUID |
+
+**Request body**: `PromptUpdateOptional`
+
+**curl**
+
+```bash
+curl -sS -X PATCH "http://localhost:8000/prompts/<prompt_id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Summarize content (patched)",
+    "description": ""
+  }'
+```
+
+**fetch**
+
+```javascript
+const promptId = '<prompt_id>';
+
+const res = await fetch(`http://localhost:8000/prompts/${promptId}`, {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    title: 'Summarize content (patched)',
+    description: '', // whitespace/empty strings are normalized to null
+  }),
+});
+
+if (!res.ok) throw new Error(await res.text());
+console.log(await res.json());
+```
+
+**Success response — 200**
+
+```json
+{
+  "id": "d010f7fa-10a5-4d1f-9b16-2dc2c75eafd3",
+  "title": "Summarize content (patched)",
+  "content": "Summarize: {{input}}",
+  "description": null,
+  "collection_id": null,
+  "created_at": "2026-02-18T18:24:20.454842",
+  "updated_at": "2026-02-18T18:35:10.000000"
+}
+```
+
+**Errors**
+
+- `404 Not Found`
+
+```json
+{ "detail": "Prompt not found" }
+```
+
+- `400 Bad Request` (when `collection_id` is provided but does not exist)
+
+```json
+{ "detail": "Collection not found" }
+```
+
+- `422 Unprocessable Entity` (invalid body; example: wrong type)
+
+```json
+{
+  "detail": [
+    {
+      "type": "string_type",
+      "loc": ["body", "title"],
+      "msg": "Input should be a valid string",
+      "input": 123
+    }
+  ]
+}
+```
+
+---
+
+#### DELETE `/prompts/{prompt_id}`
+Delete a prompt by ID.
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---:|---|
+| `prompt_id` | string | yes | Prompt UUID |
+
+**curl**
+
+```bash
+curl -sS -X DELETE "http://localhost:8000/prompts/<prompt_id>" -i
+```
+
+**fetch**
+
+```javascript
+const promptId = '<prompt_id>';
+
+const res = await fetch(`http://localhost:8000/prompts/${promptId}`, {
+  method: 'DELETE',
+});
+
+if (res.status !== 204) throw new Error(await res.text());
+```
+
+**Success response — 204**
+
+No response body.
+
+**Errors**
+
+- `404 Not Found`
+
+```json
+{ "detail": "Prompt not found" }
+```
+
+---
+
+### Collections
+
+#### GET `/collections`
+List collections.
+
+**curl**
+
+```bash
+curl -sS "http://localhost:8000/collections"
+```
+
+**fetch**
+
+```javascript
+const res = await fetch('http://localhost:8000/collections');
+const data = await res.json();
+console.log(data);
+```
+
+**Success response — 200**
+
+```json
+{
+  "collections": [
+    {
+      "id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
+      "name": "Onboarding",
+      "description": "Prompts used during onboarding",
+      "created_at": "2026-02-18T19:51:56.546992"
+    }
+  ],
+  "total": 1
+}
+```
+
+**Errors**
+
+- `500 Internal Server Error` (unexpected)
+
+---
+
+#### GET `/collections/{collection_id}`
+Fetch a single collection by ID.
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---:|---|
+| `collection_id` | string | yes | Collection UUID |
+
+**curl**
+
+```bash
+curl -sS "http://localhost:8000/collections/<collection_id>"
+```
+
+**fetch**
+
+```javascript
+const collectionId = '<collection_id>';
+const res = await fetch(`http://localhost:8000/collections/${collectionId}`);
+if (!res.ok) throw new Error(await res.text());
+console.log(await res.json());
+```
+
+**Success response — 200**
+
+```json
+{
+  "id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
+  "name": "Onboarding",
+  "description": "Prompts used during onboarding",
+  "created_at": "2026-02-18T19:51:56.546992"
+}
+```
+
+**Errors**
+
+- `404 Not Found`
+
+```json
+{ "detail": "Collection not found" }
+```
+
+---
+
+#### POST `/collections`
+Create a new collection.
+
+**Request body**: `CollectionCreate`
+
+**curl**
+
+```bash
+curl -sS -X POST "http://localhost:8000/collections" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Onboarding",
+    "description": "Prompts used during onboarding"
+  }'
+```
+
+**fetch**
+
+```javascript
+const res = await fetch('http://localhost:8000/collections', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    name: 'Onboarding',
+    description: 'Prompts used during onboarding',
+  }),
+});
+
+if (!res.ok) throw new Error(await res.text());
+console.log(await res.json());
+```
+
+**Success response — 201**
+
+```json
+{
+  "id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
+  "name": "Onboarding",
+  "description": "Prompts used during onboarding",
+  "created_at": "2026-02-18T19:51:56.546992"
+}
+```
+
+**Errors**
+
+- `422 Unprocessable Entity` (invalid body; example: missing `name`)
+
+```json
+{
+  "detail": [
+    {
+      "type": "missing",
+      "loc": ["body", "name"],
+      "msg": "Field required",
+      "input": { "description": "Prompts used during onboarding" }
+    }
+  ]
+}
+```
+
+---
+
+#### DELETE `/collections/{collection_id}`
+Delete a collection by ID.
+
+Notes:
+- Deleting a collection also deletes all prompts that belong to it.
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---:|---|
+| `collection_id` | string | yes | Collection UUID |
+
+**curl**
+
+```bash
+curl -sS -X DELETE "http://localhost:8000/collections/<collection_id>" -i
+```
+
+**fetch**
+
+```javascript
+const collectionId = '<collection_id>';
+
+const res = await fetch(`http://localhost:8000/collections/${collectionId}`, {
+  method: 'DELETE',
+});
+
+if (res.status !== 204) throw new Error(await res.text());
+```
+
+**Success response — 204**
+
+No response body.
+
+**Errors**
+
+- `404 Not Found`
+
+```json
+{ "detail": "Collection not found" }
+```
