@@ -1,4 +1,25 @@
-"""FastAPI routes for PromptLab"""
+"""FastAPI routes for PromptLab.
+
+This module defines the FastAPI application instance and its HTTP routes.
+
+The application is configured with basic OpenAPI metadata (title, description,
+version), which is used for generated API documentation and client integrations.
+
+This module also configures Cross-Origin Resource Sharing (CORS) middleware on
+the application instance to control how browsers handle cross-origin requests.
+
+The current configuration is fully permissive:
+- Allows requests from any origin (``allow_origins=["*"]``).
+- Allows cookies/authorization headers to be included (``allow_credentials=True``).
+- Allows all HTTP methods and headers (``allow_methods=["*"]``,
+  ``allow_headers=["*"]``).
+
+Note:
+    Using ``allow_origins=["*"]`` together with ``allow_credentials=True`` is not
+    valid under the CORS specification for credentialed browser requests; browsers
+    will typically reject such responses unless a specific origin is echoed back.
+    Prefer explicitly listing allowed origins when credentials are required.
+"""
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,22 +38,6 @@ from app.utils import sort_prompts_by_date, filter_prompts_by_collection, search
 from app import __version__
 
 
-"""Initialize the FastAPI application instance.
-
-Creates the central ASGI application object for PromptLab. The application is
-configured with basic OpenAPI metadata (title, description, version), which is
-used for generated API documentation and client integrations.
-
-Args:
-    None.
-
-Returns:
-    fastapi.FastAPI: A configured FastAPI application instance with OpenAPI
-    metadata set (title, description, version).
-
-Raises:
-    None.
-"""
 app = FastAPI(
     title="PromptLab API",
     description="AI Prompt Engineering Platform",
@@ -40,30 +45,6 @@ app = FastAPI(
 )
 
 # CORS middleware
-"""Configure Cross-Origin Resource Sharing (CORS) middleware for the application.
-
-This registers FastAPI/Starlette's :class:`~starlette.middleware.cors.CORSMiddleware`
-on the application instance to control how browsers handle cross-origin requests.
-
-The current configuration is fully permissive:
-- Allows requests from any origin (``allow_origins=["*"]``).
-- Allows cookies/authorization headers to be included (``allow_credentials=True``).
-- Allows all HTTP methods and headers (``allow_methods=["*"]``,
-  ``allow_headers=["*"]``).
-
-Note:
-    Using ``allow_origins=["*"]`` together with ``allow_credentials=True`` is not
-    valid under the CORS specification for credentialed browser requests; browsers
-    will typically reject such responses unless a specific origin is echoed back.
-    Prefer explicitly listing allowed origins when credentials are required.
-
-Args:
-    None: This block does not take parameters; it mutates the application by
-        adding middleware.
-
-Returns:
-    None: The middleware is registered for its side effects.
-"""
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -82,6 +63,7 @@ def health_check():
     This endpoint is intended for use by load balancers, orchestration systems,
     and monitoring tools to verify that the API process is running and to
     retrieve the currently deployed version.
+
     Returns:
         HealthResponse: A response object containing:
             - status: Health status string (typically "healthy").
@@ -165,8 +147,10 @@ def create_prompt(prompt_data: PromptCreate):
         prompt_data (PromptCreate): Payload containing the fields required to
             create a new prompt. If `collection_id` is provided, it must refer
             to an existing collection.
+
     Returns:
         Prompt: The newly created prompt as stored in the database.
+
     Raises:
         HTTPException: Raised with status code 400 if `prompt_data.collection_id`
             is provided but no matching collection is found.
@@ -241,9 +225,11 @@ def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(...)):
         prompt_id: Unique identifier of the prompt to update.
         prompt_data: Partial prompt payload. Only fields set in this object are
             applied to the existing prompt.
+
     Returns:
         The persisted, updated prompt model after applying any requested changes.
         If no fields are provided, the existing prompt is returned unchanged.
+
     Raises:
         HTTPException: If the prompt does not exist (404), or if a provided
             `collection_id` does not correspond to an existing collection (400).
@@ -300,6 +286,7 @@ def list_collections():
 
     Retrieves all collections from storage and returns them along with the total
     number of collections.
+
     Returns:
         CollectionList: Response object containing:
             - collections: The list of all collections.
@@ -379,4 +366,3 @@ def delete_collection(collection_id: str):
         raise HTTPException(status_code=404, detail="Collection not found")
 
     return None
-
