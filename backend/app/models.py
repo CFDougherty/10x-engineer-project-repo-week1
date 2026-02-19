@@ -7,27 +7,29 @@ from uuid import uuid4
 from pydantic import BaseModel, Field, field_validator
 
 def generate_id() -> str:
-    """Generates a UUID4 identifier string.
+    """Generate a UUID4 identifier string.
+
     Returns:
         str: A UUID4 string (e.g., "3fa85f64-5717-4562-b3fc-2c963f66afa6").
     """
     return str(uuid4())
 
 def get_current_time() -> datetime:
-    """Gets the current UTC time as a naive `datetime`.
+    """Get the current UTC time as a naive `datetime`.
 
     This function returns the current time in Coordinated Universal Time (UTC)
     without timezone information (i.e., a naive `datetime`).
+
     Returns:
         datetime: The current time in UTC (naive).
-
     """
     return datetime.utcnow()
 
 
 # ============== Prompt Models ==============
 class PromptUpdateOptional(BaseModel):
-    """
+    """Schema for updating a prompt with optional fields.
+
     Attributes:
         title (Optional[str]): Updated prompt title.
         content (Optional[str]): Updated prompt content.
@@ -48,8 +50,10 @@ class PromptUpdateOptional(BaseModel):
             cls: The model class.
             v: The value being validated.
             info: Validator context information provided by Pydantic.
+
         Returns:
-            Any: None if the input is an empty or whitespace-only string; otherwise the original value.
+            Any: None if the input is an empty or whitespace-only string; otherwise
+                the original value.
         """
 
         # Ensure that fields are not empty strings or only whitespace
@@ -58,7 +62,8 @@ class PromptUpdateOptional(BaseModel):
         return v
     
 class PromptBase(BaseModel):
-    """
+    """Base schema for a prompt.
+
     Attributes:
         title (str): Prompt title (1-200 characters).
         content (str): Prompt content (minimum 1 character).
@@ -80,7 +85,7 @@ class PromptCreate(PromptBase):
 class PromptUpdate(PromptBase):
     """Schema for updating an existing prompt.
 
-    This model inherits all fields and validation rules from :class:`PromptBase`
+    This model inherits all fields and validation rules from PromptBase
     and does not introduce additional fields. It is typically used for request
     payloads where a prompt update is expected.
 
@@ -91,9 +96,9 @@ class PromptUpdate(PromptBase):
 
 
 class Prompt(PromptBase):
-    """Represents a persisted prompt entity.
+    """Represent a persisted prompt entity.
 
-    This model extends :class:`PromptBase` by adding persistence-related fields
+    This model extends PromptBase by adding persistence-related fields
     such as a unique identifier and audit timestamps. The ``id`` is generated
     automatically, and ``created_at`` / ``updated_at`` default to the current
     time at instantiation.
@@ -139,19 +144,19 @@ class CollectionCreate(CollectionBase):
     """Schema for creating a collection.
 
     This model represents the payload required to create a new collection.
-    It inherits all fields and validation rules from `CollectionBase` and
+    It inherits all fields and validation rules from CollectionBase and
     does not introduce any additional attributes.
 
     Attributes:
-        (Inherited): All attributes are inherited from `CollectionBase`.
+        (Inherited): All attributes are inherited from CollectionBase.
     """
     pass
 
 
 class Collection(CollectionBase):
-    """Represents a persisted collection with a unique identifier and timestamps.
+    """Represent a persisted collection with a unique identifier and timestamps.
 
-    This model extends `CollectionBase` by adding fields that are typically assigned
+    This model extends CollectionBase by adding fields that are typically assigned
     when the collection is created and stored, such as a generated ID and a
     creation timestamp.
 
@@ -212,4 +217,3 @@ class HealthResponse(BaseModel):
 
     status: str
     version: str
-
