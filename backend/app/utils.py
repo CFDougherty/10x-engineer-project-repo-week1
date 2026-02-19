@@ -1,4 +1,4 @@
-"""Utility functions for PromptLab"""
+"""Utility functions for PromptLab."""
 
 from typing import List
 from app.models import Prompt

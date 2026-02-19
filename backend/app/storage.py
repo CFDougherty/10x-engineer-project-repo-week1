@@ -1,4 +1,4 @@
-"""In-memory storage for PromptLab
+"""In-memory storage for PromptLab.
 
 This module provides simple in-memory storage for prompts and collections.
 In a production environment, this would be replaced with a database.
@@ -18,9 +18,6 @@ class Storage:
 
         The storage is intended for lightweight, ephemeral use (e.g., local
         development/testing). Data is not persisted across process restarts.
-
-        Args:
-            None
 
         Returns:
             None
@@ -75,9 +72,6 @@ class Storage:
             ``self._prompts.values()`` (i.e., the dictionary's insertion order for
             this process), and should not be relied upon as a stable sort order
             across runs.
-
-        Args:
-            None
 
         Returns:
             A list of :class:`app.models.Prompt` objects currently stored in this
@@ -175,9 +169,6 @@ class Storage:
             ``self._collections.values()`` (i.e., the dictionary's insertion order for
             this process), and should not be relied upon as a stable sort order across
             runs.
-
-        Args:
-            None
 
         Returns:
             A list of :class:`app.models.Collection` objects currently stored in this
@@ -283,9 +274,6 @@ class Storage:
         This is a destructive, in-memory-only operation intended for scenarios like
         tests or resetting ephemeral development state. It does not affect any
         external persistence layer (this module implements only in-memory storage).
-
-        Args:
-            None
 
         Returns:
             None

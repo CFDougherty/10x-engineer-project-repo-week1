@@ -1,4 +1,4 @@
-"""Pydantic models for PromptLab"""
+"""Pydantic models for PromptLab."""
 
 from datetime import datetime
 from typing import Optional, List
