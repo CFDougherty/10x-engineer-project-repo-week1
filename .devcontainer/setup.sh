@@ -32,7 +32,7 @@ schema: v1
 models:
   - name: OpenAI-via-Helicone-Proxy
     provider: openai
-    model: gpt-5.2
+    model: gpt-5.1-codex-mini
     apiBase: https://ai-gateway.helicone.ai/v1
     apiKey: '$API_KEY'
   - name: Autodetect
