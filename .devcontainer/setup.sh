@@ -35,6 +35,11 @@ models:
     model: gpt-5.2
     apiBase: https://ai-gateway.helicone.ai/v1
     apiKey: '$API_KEY'
+- name: Autodetect
+    provider: lmstudio
+    model: AUTODETECT
+    apiBase: https://flummoxedly-suborbicular-stanton.ngrok-free.dev/v1
+    apiKey: ${{ secrets.LM_API_TOKEN }}
 roles:
   - chat
   - edit
