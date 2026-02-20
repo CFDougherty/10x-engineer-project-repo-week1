@@ -1,0 +1,27 @@
+# Bytecode caches
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Git metadata
+.git
+.gitignore
+
+# Local environment files
+.env
+.venv/
+.pytest_cache/
+
+# Build artifacts & tests
+tests/
+.coverage
+
+# Documentation & frontend artifacts
+docs/
+frontend/
+
+# Editor & tooling artifacts
+.vscode/
+.idea/
+*.log
+*.sqlite3
