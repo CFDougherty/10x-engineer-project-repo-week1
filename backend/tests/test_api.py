@@ -86,6 +86,33 @@ class TestPrompts:
             "collection_id": "invalid-collection-id"
         })
         assert response.status_code == 400
+
+    def test_create_prompt_with_title_too_long(self, client: TestClient):
+        """Test creating a prompt with title exceeding maximum length."""
+        long_title = "A" * 201  # Exceeds 200 character limit
+        response = client.post("/prompts", json={
+            "title": long_title,
+            "content": "Content"
+        })
+        assert response.status_code == 400
+
+    def test_create_prompt_with_description_too_long(self, client: TestClient):
+        """Test creating a prompt with description exceeding maximum length."""
+        long_description = "A" * 501  # Exceeds 500 character limit
+        response = client.post("/prompts", json={
+            "title": "Test",
+            "content": "Content",
+            "description": long_description
+        })
+        assert response.status_code == 400
+
+    def test_create_prompt_with_whitespace_only_strings(self, client: TestClient):
+        """Test creating a prompt with whitespace-only strings."""
+        response = client.post("/prompts", json={
+            "title": "   ",
+            "content": "   "
+        })
+        assert response.status_code == 400
     
     def test_list_prompts_empty(self, client: TestClient):
         """
@@ -150,6 +177,61 @@ class TestPrompts:
         data = response.json()
         assert len(data["prompts"]) == 2
         assert data["total"] >= 5
+
+    def test_list_prompts_with_collection_filter(self, client: TestClient):
+        """Test filtering prompts by collection."""
+        # Create a collection
+        collection_response = client.post("/collections", json={"name": "Test Collection"})
+        collection_id = collection_response.json()["id"]
+        
+        # Create prompts in different collections
+        prompt1 = {"title": "Prompt 1", "content": "Content 1", "collection_id": collection_id}
+        prompt2 = {"title": "Prompt 2", "content": "Content 2"}  # No collection
+        
+        client.post("/prompts", json=prompt1)
+        client.post("/prompts", json=prompt2)
+
+        # Filter by collection
+        response = client.get(f"/prompts?collection_id={collection_id}")
+        prompts = response.json()["prompts"]
+        assert len(prompts) == 1
+        assert prompts[0]["collection_id"] == collection_id
+
+    def test_list_prompts_with_search(self, client: TestClient):
+        """Test searching prompts by content."""
+        prompt1 = {"title": "Python", "content": "Python programming language"}
+        prompt2 = {"title": "JavaScript", "content": "JavaScript programming language"}
+        
+        client.post("/prompts", json=prompt1)
+        client.post("/prompts", json=prompt2)
+
+        # Search for "Python"
+        response = client.get("/prompts?search=Python")
+        prompts = response.json()["prompts"]
+        assert len(prompts) == 1
+        assert prompts[0]["title"] == "Python"
+
+    def test_list_prompts_with_combined_filters(self, client: TestClient):
+        """Test combining multiple query parameters."""
+        # Create a collection
+        collection_response = client.post("/collections", json={"name": "Test Collection"})
+        collection_id = collection_response.json()["id"]
+        
+        # Create prompts
+        prompt1 = {"title": "Python Search", "content": "Python programming language", "collection_id": collection_id}
+        prompt2 = {"title": "JavaScript Search", "content": "JavaScript programming language", "collection_id": collection_id}
+        prompt3 = {"title": "Python Other", "content": "Python other content"}  # No collection
+        
+        client.post("/prompts", json=prompt1)
+        client.post("/prompts", json=prompt2)
+        client.post("/prompts", json=prompt3)
+
+        # Filter by collection and search
+        response = client.get(f"/prompts?collection_id={collection_id}&search=Python")
+        prompts = response.json()["prompts"]
+        assert len(prompts) == 1
+        assert prompts[0]["title"] == "Python Search"
+        assert prompts[0]["collection_id"] == collection_id
     
     def test_get_prompt_success(self, client: TestClient, sample_prompt_data):
         """Test retrieving a prompt by ID."""
@@ -287,6 +369,59 @@ class TestPrompts:
         
         # Newest (Second) should be first
         assert prompts[0]["title"] == "Second" 
+
+    def test_concurrent_prompt_creation(self, client: TestClient):
+        """Test creating multiple prompts in quick succession."""
+        prompts_data = [
+            {"title": f"Prompt {i}", "content": f"Content {i}"} 
+            for i in range(10)
+        ]
+        
+        # Create multiple prompts
+        for prompt_data in prompts_data:
+            response = client.post("/prompts", json=prompt_data)
+            assert response.status_code == 201
+        
+        # Verify all were created
+        response = client.get("/prompts")
+        prompts = response.json()["prompts"]
+        assert len(prompts) == 10
+
+    def test_prompt_with_all_optional_fields(self, client: TestClient):
+        """Test creating a prompt with all optional fields."""
+        prompt_data = {
+            "title": "Minimal Prompt",
+            "content": "Minimal content"
+        }
+        
+        response = client.post("/prompts", json=prompt_data)
+        assert response.status_code == 201
+        data = response.json()
+        assert data["title"] == "Minimal Prompt"
+        assert data["content"] == "Minimal content"
+        assert data["description"] is None
+        assert data["collection_id"] is None
+
+    def test_prompt_with_all_fields(self, client: TestClient):
+        """Test creating a prompt with all fields."""
+        # Create a collection first
+        collection_response = client.post("/collections", json={"name": "Test Collection"})
+        collection_id = collection_response.json()["id"]
+        
+        prompt_data = {
+            "title": "Complete Prompt",
+            "content": "Complete content",
+            "description": "Complete description",
+            "collection_id": collection_id
+        }
+        
+        response = client.post("/prompts", json=prompt_data)
+        assert response.status_code == 201
+        data = response.json()
+        assert data["title"] == "Complete Prompt"
+        assert data["content"] == "Complete content"
+        assert data["description"] == "Complete description"
+        assert data["collection_id"] == collection_id 
     
     def test_prompt_lifecycle(self, client: TestClient):
         """Test the full lifecycle of a prompt (create, read, update, delete)."""
@@ -313,6 +448,93 @@ class TestPrompts:
         verify_response = client.get(f"/prompts/{prompt_id}")
         assert verify_response.status_code == 404
 
+class TestAPIResponseFormat:
+    """Tests for API response format consistency."""
+
+    def test_health_response_format(self, client: TestClient):
+        """Test that health endpoint returns consistent response format."""
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert "status" in data
+        assert "version" in data
+        assert isinstance(data["status"], str)
+        assert isinstance(data["version"], str)
+
+    def test_prompt_response_format(self, client: TestClient, sample_prompt_data):
+        """Test that prompt responses have consistent format."""
+        # Create prompt
+        create_response = client.post("/prompts", json=sample_prompt_data)
+        prompt_id = create_response.json()["id"]
+        
+        # Get prompt
+        get_response = client.get(f"/prompts/{prompt_id}")
+        data = get_response.json()
+        
+        # Verify required fields
+        required_fields = ["id", "title", "content", "created_at", "updated_at"]
+        for field in required_fields:
+            assert field in data
+        
+        # Verify optional fields
+        optional_fields = ["description", "collection_id"]
+        for field in optional_fields:
+            assert field in data
+
+    def test_collection_response_format(self, client: TestClient, sample_collection_data):
+        """Test that collection responses have consistent format."""
+        # Create collection
+        create_response = client.post("/collections", json=sample_collection_data)
+        collection_id = create_response.json()["id"]
+        
+        # Get collection
+        get_response = client.get(f"/collections/{collection_id}")
+        data = get_response.json()
+        
+        # Verify required fields
+        required_fields = ["id", "name", "created_at"]
+        for field in required_fields:
+            assert field in data
+        
+        # Verify optional fields
+        optional_fields = ["description"]
+        for field in optional_fields:
+            assert field in data
+
+    def test_list_response_format(self, client: TestClient):
+        """Test that list responses have consistent format."""
+        # Test prompts list
+        prompts_response = client.get("/prompts")
+        prompts_data = prompts_response.json()
+        assert "prompts" in prompts_data
+        assert "total" in prompts_data
+        assert isinstance(prompts_data["prompts"], list)
+        assert isinstance(prompts_data["total"], int)
+        
+        # Test collections list
+        collections_response = client.get("/collections")
+        collections_data = collections_response.json()
+        assert "collections" in collections_data
+        assert "total" in collections_data
+        assert isinstance(collections_data["collections"], list)
+        assert isinstance(collections_data["total"], int)
+
+    def test_error_response_format(self, client: TestClient):
+        """Test that error responses have consistent format."""
+        # Test 404 error
+        response = client.get("/prompts/nonexistent-id")
+        assert response.status_code == 404
+        data = response.json()
+        assert "detail" in data
+        assert isinstance(data["detail"], str)
+        
+        # Test 400 error
+        response = client.post("/prompts", json={"title": "", "content": "Content"})
+        assert response.status_code == 400
+        data = response.json()
+        assert "detail" in data
+
+
 class TestCollections:
     """Tests for collection endpoints."""
     
@@ -324,6 +546,36 @@ class TestCollections:
         data = response.json()
         assert data["name"] == sample_collection_data["name"]
         assert "id" in data
+
+    def test_create_collection_with_empty_name(self, client: TestClient):
+        """Test creating a collection with empty name."""
+        response = client.post("/collections", json={"name": ""})
+        assert response.status_code == 400
+
+    def test_create_collection_with_very_long_name(self, client: TestClient):
+        """Test creating a collection with very long name."""
+        long_name = "A" * 101  # Exceeds 100 character limit
+        response = client.post("/collections", json={"name": long_name})
+        assert response.status_code == 400
+
+    def test_create_collection_with_special_characters(self, client: TestClient):
+        """Test creating a collection with special characters."""
+        special_data = {
+            "name": "Test <script>alert('xss')</script>",
+            "description": "Special chars: \n\t\r, quotes '\""
+        }
+        response = client.post("/collections", json=special_data)
+        assert response.status_code == 201
+
+    def test_create_collection_with_null_values(self, client: TestClient):
+        """Test creating a collection with null values."""
+        response = client.post("/collections", json={"name": None})
+        assert response.status_code == 400
+
+    def test_create_collection_missing_required_field(self, client: TestClient):
+        """Test creating a collection without name."""
+        response = client.post("/collections", json={"description": "Some description"})
+        assert response.status_code == 400
     
     def test_list_collections(self, client: TestClient, sample_collection_data):
         """Test listing collections by creating and retrieving a collection.
@@ -338,6 +590,14 @@ class TestCollections:
         assert response.status_code == 200
         data = response.json()
         assert len(data["collections"]) == 1
+
+    def test_list_collections_empty(self, client: TestClient):
+        """Test listing collections when none exist."""
+        response = client.get("/collections")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["collections"] == []
+        assert data["total"] == 0
     
     def test_get_collection_not_found(self, client: TestClient):
         # The following function tests that retrieving a non-existent collection
@@ -351,6 +611,81 @@ class TestCollections:
         """
         response = client.get("/collections/nonexistent-id")
         assert response.status_code == 404
+
+    def test_update_collection(self, client: TestClient, sample_collection_data):
+        """Test updating an existing collection."""
+        # Create a collection first
+        create_response = client.post("/collections", json=sample_collection_data)
+        collection_id = create_response.json()["id"]
+        
+        # Update it
+        updated_data = {
+            "name": "Updated Collection Name",
+            "description": "Updated description for the collection"
+        }
+        
+        response = client.put(f"/collections/{collection_id}", json=updated_data)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "Updated Collection Name"
+        assert data["description"] == "Updated description for the collection"
+
+    def test_update_collection_with_invalid_data(self, client: TestClient, sample_collection_data):
+        """Test updating a collection with invalid data."""
+        # Create a collection first
+        create_response = client.post("/collections", json=sample_collection_data)
+        collection_id = create_response.json()["id"]
+        
+        # Try to update with empty name
+        response = client.put(f"/collections/{collection_id}", json={"name": ""})
+        assert response.status_code == 400
+
+    def test_update_collection_not_found(self, client: TestClient):
+        """Test updating a non-existent collection."""
+        response = client.put("/collections/nonexistent-id", json={"name": "New Name"})
+        assert response.status_code == 404
+
+    def test_patch_collection_partial_update(self, client: TestClient, sample_collection_data):
+        """Test partially updating a collection."""
+        # Create a collection first
+        create_response = client.post("/collections", json=sample_collection_data)
+        collection_id = create_response.json()["id"]
+        original_data = create_response.json()
+
+        # Partially update
+        partial_update_data = {
+            "name": "Partially Updated Name"
+        }
+
+        response = client.patch(f"/collections/{collection_id}", json=partial_update_data)
+        assert response.status_code == 200
+        updated_data = response.json()
+        
+        # Verify updated fields
+        assert updated_data["name"] == partial_update_data["name"]
+        
+        # Verify unchanged fields
+        assert updated_data["description"] == original_data["description"]
+
+    def test_patch_collection_non_existent(self, client: TestClient):
+        """Test patching a non-existent collection."""
+        response = client.patch("/collections/nonexistent-id", json={"name": "New Name"})
+        assert response.status_code == 404
+
+    def test_patch_collection_empty_payload(self, client: TestClient, sample_collection_data):
+        """Test patch request with empty payload."""
+        # Create a collection first
+        create_response = client.post("/collections", json=sample_collection_data)
+        collection_id = create_response.json()["id"]
+        original_data = create_response.json()
+
+        # Patch with empty payload
+        response = client.patch(f"/collections/{collection_id}", json={})
+        assert response.status_code == 200
+        unchanged_data = response.json()
+        
+        # Verify the data remains unchanged
+        assert unchanged_data == original_data
     
     def test_delete_collection_with_prompts(self, client: TestClient, sample_collection_data, sample_prompt_data):
         """Test the deletion of a collection with associated prompts.
@@ -383,6 +718,25 @@ class TestCollections:
             # Prompt exists with orphaned collection_id
             assert prompts[0]["collection_id"] == collection_id
             # After fix, collection_id should be None or prompt should be deleted
+
+    def test_delete_collection_nonexistent(self, client: TestClient):
+        """Test deleting a non-existent collection."""
+        response = client.delete("/collections/nonexistent-id")
+        assert response.status_code == 404
+
+    def test_delete_collection_twice(self, client: TestClient, sample_collection_data):
+        """Test deleting a collection twice."""
+        # Create collection
+        col_response = client.post("/collections", json=sample_collection_data)
+        collection_id = col_response.json()["id"]
+        
+        # Delete it once
+        response1 = client.delete(f"/collections/{collection_id}")
+        assert response1.status_code == 204
+        
+        # Try to delete it again
+        response2 = client.delete(f"/collections/{collection_id}")
+        assert response2.status_code == 404
             
     def test_delete_collection_also_deletes_prompts(self, client: TestClient, sample_collection_data, sample_prompt_data):
         """Verify prompts are deleted when a collection is deleted.
@@ -530,3 +884,92 @@ class TestCollections:
 
         # Verify the updated_at timestamp has changed
         assert updated_data["updated_at"] != original_updated_at
+
+    def test_patch_prompt_no_changes(self, client: TestClient, sample_prompt_data):
+        """Test that patching with no actual changes doesn't update timestamp."""
+        # Create a prompt first
+        create_response = client.post("/prompts", json=sample_prompt_data)
+        prompt_id = create_response.json()["id"]
+        original_updated_at = create_response.json()["updated_at"]
+
+        # Try to patch with the same values
+        response = client.patch(f"/prompts/{prompt_id}", json=sample_prompt_data)
+        assert response.status_code == 200
+        updated_data = response.json()
+
+        # Verify the updated_at timestamp hasn't changed
+        assert updated_data["updated_at"] == original_updated_at
+
+    def test_prompt_data_integrity(self, client: TestClient):
+        """Test that prompt data remains consistent across operations."""
+        original_data = {
+            "title": "Integrity Test",
+            "content": "Original content",
+            "description": "Original description"
+        }
+        
+        # Create prompt
+        create_response = client.post("/prompts", json=original_data)
+        prompt_id = create_response.json()["id"]
+        
+        # Get prompt
+        get_response = client.get(f"/prompts/{prompt_id}")
+        retrieved_data = get_response.json()
+        
+        # Verify data integrity
+        assert retrieved_data["title"] == original_data["title"]
+        assert retrieved_data["content"] == original_data["content"]
+        assert retrieved_data["description"] == original_data["description"]
+        assert retrieved_data["id"] == prompt_id
+        assert "created_at" in retrieved_data
+        assert "updated_at" in retrieved_data
+
+    def test_prompt_validation_consistency(self, client: TestClient):
+        """Test that validation rules are consistently applied."""
+        # Test title validation
+        response1 = client.post("/prompts", json={"title": "", "content": "Content"})
+        assert response1.status_code == 400
+        
+        # Test content validation
+        response2 = client.post("/prompts", json={"title": "Title", "content": ""})
+        assert response2.status_code == 400
+        
+        # Test both validation
+        response3 = client.post("/prompts", json={"title": "", "content": ""})
+        assert response3.status_code == 400
+
+    def test_collection_validation_consistency(self, client: TestClient):
+        """Test that collection validation rules are consistently applied."""
+        # Test name validation
+        response1 = client.post("/collections", json={"name": ""})
+        assert response1.status_code == 400
+        
+        # Test name length validation
+        response2 = client.post("/collections", json={"name": "A" * 101})
+        assert response2.status_code == 400
+
+    def test_prompt_collection_relationship(self, client: TestClient):
+        """Test the relationship between prompts and collections."""
+        # Create collection
+        collection_response = client.post("/collections", json={"name": "Test Collection"})
+        collection_id = collection_response.json()["id"]
+        
+        # Create prompt in collection
+        prompt_data = {
+            "title": "Test Prompt",
+            "content": "Test content",
+            "collection_id": collection_id
+        }
+        prompt_response = client.post("/prompts", json=prompt_data)
+        prompt_id = prompt_response.json()["id"]
+        
+        # Verify relationship
+        get_prompt_response = client.get(f"/prompts/{prompt_id}")
+        prompt = get_prompt_response.json()
+        assert prompt["collection_id"] == collection_id
+        
+        # List prompts by collection
+        list_response = client.get(f"/prompts?collection_id={collection_id}")
+        prompts = list_response.json()["prompts"]
+        assert len(prompts) == 1
+        assert prompts[0]["id"] == prompt_id
