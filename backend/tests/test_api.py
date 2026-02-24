@@ -547,6 +547,176 @@ class TestCollections:
         assert data["name"] == sample_collection_data["name"]
         assert "id" in data
 
+class TestDetailedErrorCases:
+    """More detailed error case testing"""
+
+    def test_invalid_uuid_format(self, client: TestClient):
+        """Test with invalid UUID format"""
+        response = client.get("/prompts/invalid-uuid-format")
+        assert response.status_code == 404
+
+    def test_malformed_json(self, client: TestClient):
+        """Test with malformed JSON payload"""
+        response = client.post("/prompts", data='{"title": "Test", "content": "Test"', headers={"Content-Type": "application/json"})
+        assert response.status_code == 422  # or 400 depending on implementation
+
+    def test_sql_injection_attempt(self, client: TestClient):
+        """Test SQL injection attempts are properly handled"""
+        malicious_data = {
+            "title": "'; DROP TABLE prompts; --",
+            "content": "malicious content"
+        }
+        response = client.post("/prompts", json=malicious_data)
+        assert response.status_code == 400  # Should be rejected
+
+    def test_xss_attempt(self, client: TestClient):
+        """Test XSS attempts are properly sanitized"""
+        xss_data = {
+            "title": "<script>alert('xss')</script>",
+            "content": "<img src=x onerror=alert(1)>"
+        }
+        response = client.post("/prompts", json=xss_data)
+        assert response.status_code == 201  # Should succeed but sanitize
+        data = response.json()
+        assert "<script>" not in data["title"]
+        assert "<img" not in data["content"]
+
+class TestDataValidation:
+    """Tests for data validation edge cases"""
+
+    def test_title_whitespace_only(self, client: TestClient):
+        """Test title with only whitespace"""
+        response = client.post("/prompts", json={
+            "title": "   \t\n",
+            "content": "Content"
+        })
+        assert response.status_code == 400
+
+    def test_content_whitespace_only(self, client: TestClient):
+        """Test content with only whitespace"""
+        response = client.post("/prompts", json={
+            "title": "Title",
+            "content": "   \t\n"
+        })
+        assert response.status_code == 400
+
+    def test_title_exact_max_length(self, client: TestClient):
+        """Test title with exactly maximum length"""
+        exact_max_title = "A" * 200
+        response = client.post("/prompts", json={
+            "title": exact_max_title,
+            "content": "Content"
+        })
+        assert response.status_code == 201
+
+    def test_description_exact_max_length(self, client: TestClient):
+        """Test description with exactly maximum length"""
+        exact_max_desc = "A" * 500
+        response = client.post("/prompts", json={
+            "title": "Title",
+            "content": "Content",
+            "description": exact_max_desc
+        })
+        assert response.status_code == 201
+
+    def test_collection_name_exact_max_length(self, client: TestClient):
+        """Test collection name with exactly maximum length"""
+        exact_max_name = "A" * 100
+        response = client.post("/collections", json={
+            "name": exact_max_name
+        })
+        assert response.status_code == 201
+
+class TestAPIContract:
+    """Tests to verify API contract consistency"""
+
+    def test_response_headers(self, client: TestClient):
+        """Test that responses have required headers"""
+        response = client.get("/prompts")
+        assert "Content-Type" in response.headers
+        assert "application/json" in response.headers["Content-Type"]
+
+    def test_response_timestamps_format(self, client: TestClient):
+        """Test that timestamp fields have consistent format"""
+        prompt_data = {"title": "Test", "content": "Test"}
+        response = client.post("/prompts", json=prompt_data)
+        data = response.json()
+
+        # Check created_at and updated_at format
+        assert "created_at" in data
+        assert "updated_at" in data
+        # Should be ISO format or Unix timestamp
+        try:
+            datetime.fromisoformat(data["created_at"].replace('Z', '+00:00'))
+        except ValueError:
+            # If not ISO format, check if it's a timestamp
+            assert isinstance(data["created_at"], (int, float))
+
+    def test_id_format(self, client: TestClient):
+        """Test that ID fields have consistent format"""
+        prompt_data = {"title": "Test", "content": "Test"}
+        response = client.post("/prompts", json=prompt_data)
+        data = response.json()
+
+        # IDs should be consistent (UUID, integer, etc.)
+        assert "id" in data
+        # Should be either UUID or integer
+        assert isinstance(data["id"], str) or isinstance(data["id"], int)
+
+class TestIntegration:
+    """Integration tests between different endpoints"""
+
+    def test_prompt_collection_integration(self, client: TestClient):
+        """Test the complete integration between prompts and collections"""
+        # Create collection
+        col_response = client.post("/collections", json={"name": "Integration Test"})
+        collection_id = col_response.json()["id"]
+
+        # Create prompt in collection
+        prompt_response = client.post("/prompts", json={
+            "title": "Integration Prompt",
+            "content": "Integration content",
+            "collection_id": collection_id
+        })
+        prompt_id = prompt_response.json()["id"]
+
+        # Verify through collection endpoint
+        col_prompts = client.get(f"/prompts?collection_id={collection_id}").json()["prompts"]
+        assert len(col_prompts) == 1
+        assert col_prompts[0]["id"] == prompt_id
+
+        # Delete collection and verify prompt handling
+        client.delete(f"/collections/{collection_id}")
+
+        # After fix, prompt should either be deleted or have collection_id=None
+        all_prompts = client.get("/prompts").json()["prompts"]
+        if all_prompts:
+            assert all_prompts[0]["collection_id"] is None
+
+    def test_search_functionality(self, client: TestClient):
+        """Test search functionality across different fields"""
+        # Create test data
+        test_data = [
+            {"title": "Python programming", "content": "Python is great"},
+            {"title": "JavaScript basics", "content": "JavaScript tutorial"},
+            {"title": "Python advanced", "content": "Advanced Python concepts"}
+        ]
+
+        for data in test_data:
+            client.post("/prompts", json=data)
+
+        # Test searching in title
+        response = client.get("/prompts?search=Python")
+        assert len(response.json()["prompts"]) == 2
+
+        # Test searching in content
+        response = client.get("/prompts?search=great")
+        assert len(response.json()["prompts"]) == 1
+
+        # Test case sensitivity
+        response = client.get("/prompts?search=python")
+        assert len(response.json()["prompts"]) == 2  # Should be case insensitive
+
     def test_create_collection_with_empty_name(self, client: TestClient):
         """Test creating a collection with empty name."""
         response = client.post("/collections", json={"name": ""})
@@ -993,3 +1163,109 @@ class TestCollections:
         """Test filtering with invalid query parameter."""
         response = client.get("/prompts?invalid_param=value")
         assert response.status_code in [200, 400]  # Should either work or return error
+
+class TestPerformance:
+    """Performance-related tests"""
+
+    def test_large_payload(self, client: TestClient):
+        """Test handling of large payloads"""
+        large_content = "A" * 100000  # 100KB
+        response = client.post("/prompts", json={
+            "title": "Large payload test",
+            "content": large_content
+        })
+        # Should either succeed or return 400 with appropriate error
+        assert response.status_code in [201, 400]
+
+class TestEdgeCases:
+    """Tests for edge cases and boundary conditions"""
+
+    def test_empty_title_with_spaces(self, client: TestClient):
+        """Test title with only spaces"""
+        response = client.post("/prompts", json={
+            "title": "   ",
+            "content": "Valid content"
+        })
+        assert response.status_code == 400
+
+    def test_empty_content_with_spaces(self, client: TestClient):
+        """Test content with only spaces"""
+        response = client.post("/prompts", json={
+            "title": "Valid title",
+            "content": "   "
+        })
+        assert response.status_code == 400
+
+    def test_title_with_newlines(self, client: TestClient):
+        """Test title with newline characters"""
+        response = client.post("/prompts", json={
+            "title": "Title\nwith\nnewlines",
+            "content": "Content"
+        })
+        assert response.status_code == 201
+
+    def test_content_with_tabs_and_newlines(self, client: TestClient):
+        """Test content with tabs and newlines"""
+        response = client.post("/prompts", json={
+            "title": "Title",
+            "content": "Content\twith\ttabs\nand\nnewlines"
+        })
+        assert response.status_code == 201
+
+    def test_unicode_characters(self, client: TestClient):
+        """Test with various Unicode characters"""
+        unicode_data = {
+            "title": "日本語テスト",  # Japanese
+            "content": "中文测试",  # Chinese
+            "description": "한국어 테스트"  # Korean
+        }
+        response = client.post("/prompts", json=unicode_data)
+        assert response.status_code == 201
+
+    def test_special_characters_in_title(self, client: TestClient):
+        """Test special characters in title"""
+        response = client.post("/prompts", json={
+            "title": "Test @#$%^&*()_+-={}[]|\\:;\"'<>,.?/~`",
+            "content": "Content"
+        })
+        assert response.status_code == 201
+
+    def test_special_characters_in_content(self, client: TestClient):
+        """Test special characters in content"""
+        response = client.post("/prompts", json={
+            "title": "Title",
+            "content": "Content @#$%^&*()_+-={}[]|\\:;\"'<>,.?/~`"
+        })
+        assert response.status_code == 201
+
+class TestConcurrency:
+    """Tests for concurrent operations"""
+
+    def test_concurrent_creations(self, client: TestClient):
+        """Test concurrent prompt creations"""
+        import threading
+        results = []
+
+        def create_prompt(i):
+            response = client.post("/prompts", json={
+                "title": f"Concurrent {i}",
+                "content": f"Content {i}"
+            })
+            results.append((i, response.status_code))
+
+        threads = []
+        for i in range(5):
+            t = threading.Thread(target=create_prompt, args=(i,))
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join()
+
+        # All requests should succeed
+        assert all(status == 201 for _, status in results)
+
+        # Verify all were created
+        response = client.get("/prompts")
+        prompts = response.json()["prompts"]
+        assert len(prompts) == 5
