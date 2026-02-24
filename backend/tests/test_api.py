@@ -973,3 +973,23 @@ class TestCollections:
         prompts = list_response.json()["prompts"]
         assert len(prompts) == 1
         assert prompts[0]["id"] == prompt_id
+
+    def test_create_prompt_with_invalid_json(self, client: TestClient):
+        """Test creating a prompt with invalid JSON."""
+        response = client.post("/prompts", data="invalid json", headers={"Content-Type": "application/json"})
+        assert response.status_code == 400
+
+    def test_create_prompt_with_wrong_content_type(self, client: TestClient):
+        """Test creating a prompt with wrong content type."""
+        response = client.post("/prompts", data='{"title": "Test", "content": "Test"}', headers={"Content-Type": "text/plain"})
+        assert response.status_code == 415
+
+    def test_list_prompts_with_invalid_sort_field(self, client: TestClient):
+        """Test sorting with invalid field name."""
+        response = client.get("/prompts?sort_by=invalid_field")
+        assert response.status_code in [200, 400]  # Should either work or return error
+
+    def test_list_prompts_with_invalid_filter(self, client: TestClient):
+        """Test filtering with invalid query parameter."""
+        response = client.get("/prompts?invalid_param=value")
+        assert response.status_code in [200, 400]  # Should either work or return error
