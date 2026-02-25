@@ -5,6 +5,20 @@ from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from uuid import uuid4
 from pydantic import BaseModel, Field, field_validator
+import html
+
+def sanitize_html(text: str) -> str:
+    """Sanitize HTML content to prevent XSS attacks.
+
+    Args:
+        text: The text to sanitize.
+
+    Returns:
+        Sanitized text with HTML entities escaped.
+    """
+    if not isinstance(text, str):
+        return text
+    return html.escape(text)
 
 def generate_id() -> str:
     """Generate a UUID4 identifier string.
@@ -73,13 +87,28 @@ class PromptBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1)
     description: Optional[str] = Field(None, max_length=500)
-    collection_id: Optional[str] = None
+    collection_id: Optional[str] = Field(None, min_length=0)  # Allow empty string or None
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        str_min_length=1
+    )
 
     @field_validator('title', 'content', mode='after')
-    def validate_non_whitespace(cls, v):
-        """Ensure title and content are not just whitespace."""
-        if isinstance(v, str) and not v.strip():
-            raise ValueError(f"{'Title' if 'title' in str(v) else 'Content'} cannot be empty or whitespace only")
+    def validate_content_non_empty(cls, v):
+        """Ensure content is not empty."""
+        if not v or not v.strip():
+            raise ValueError("content must be a non-empty string")
+        return v
+
+    @field_validator('title', 'content', mode='after')
+    def validate_no_sql_injection(cls, v):
+        """Check for SQL injection patterns in title and content."""
+        sql_patterns = ["'; DROP", "'; DELETE", "'; INSERT", "'; UPDATE", "'; SELECT", "'; TRUNCATE"]
+        if isinstance(v, str):
+            for pattern in sql_patterns:
+                if pattern.upper() in v.upper():
+                    raise ValueError(f"Input contains disallowed SQL pattern: {pattern}")
         return v
 
     @field_validator('title', mode='after')
@@ -95,6 +124,14 @@ class PromptBase(BaseModel):
         if v is not None and len(v) > 500:
             raise ValueError("Description must be 500 characters or less")
         return v
+
+    @field_validator('title', mode='after')
+    def validate_title_non_empty(cls, v):
+        """Ensure title is not empty."""
+        if not v or not v.strip():
+            raise ValueError("title must be a non-empty string")
+        return v
+
 
 class PromptCreate(PromptBase):
     """Schema for creating a new prompt."""
@@ -139,6 +176,20 @@ class Prompt(PromptBase):
     created_at: datetime = Field(default_factory=get_current_time)
     updated_at: datetime = Field(default_factory=get_current_time)
     version: Optional[int] = Field(None, description="Current version number")
+
+    def __setattr__(self, name, value):
+        """Override attribute setting to update timestamp when content changes and sanitize HTML."""
+        if name in ['title', 'content', 'description']:
+            # Sanitize HTML to prevent XSS attacks
+            value = sanitize_html(value)
+            super().__setattr__(name, value)
+            # Only update timestamp if this is not the initial creation
+            if hasattr(self, 'updated_at'):
+                super().__setattr__('updated_at', get_current_time())
+        elif name == 'collection_id':
+            super().__setattr__(name, value)
+        else:
+            super().__setattr__(name, value)
 
     def __eq__(self, other):
         """Compare prompts by their data, not by object identity.

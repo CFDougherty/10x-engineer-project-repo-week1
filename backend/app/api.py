@@ -28,6 +28,10 @@ from fastapi import status
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Path, Body, Request
 from fastapi.responses import JSONResponse
+from fastapi import HTTPException, status
+from fastapi.exceptions import RequestValidationError
+from fastapi import Request
+from fastapi.responses import JSONResponse, PlainTextResponse
 from app.models import Prompt, PromptUpdateOptional
 
 from app.models import (
@@ -64,6 +68,19 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content={"detail": "Validation error: " + str(exc.errors()[0]["msg"]) if exc.errors() else "Invalid input"},
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions, including unsupported media type."""
+    if exc.status_code == 415:
+        return PlainTextResponse(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            content="Unsupported media type"
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
     )
 
 
@@ -439,6 +456,10 @@ def patch_collection(collection_id: str, collection_data: CollectionCreate):
     existing = storage.get_collection(collection_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Collection not found")
+
+    # Check if any fields were actually provided
+    if collection_data.name is None and collection_data.description is None:
+        return existing  # Return unchanged if no fields provided
 
     # Update only the fields that are provided
     updated_collection = Collection(

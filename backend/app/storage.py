@@ -103,11 +103,21 @@ class Storage:
         """
         if prompt_id not in self._prompts:
             return None
-        # Preserve the original created_at timestamp
+        # Preserve the original ID and created_at timestamp
         original_prompt = self._prompts[prompt_id]
-        prompt.created_at = original_prompt.created_at
-        self._prompts[prompt_id] = prompt
-        return prompt
+        # Create a new prompt with the original ID and created_at
+        updated_prompt = Prompt(
+            id=prompt_id,
+            title=prompt.title,
+            content=prompt.content,
+            description=prompt.description,
+            collection_id=prompt.collection_id,
+            created_at=original_prompt.created_at,
+            updated_at=prompt.updated_at,
+            version=prompt.version
+        )
+        self._prompts[prompt_id] = updated_prompt
+        return updated_prompt
 
     def patch_prompt(self, prompt_id: str, prompt: Prompt) -> Optional[Prompt]:
         """Partially update an existing prompt in in-memory storage.
