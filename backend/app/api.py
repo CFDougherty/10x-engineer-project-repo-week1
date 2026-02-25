@@ -296,7 +296,7 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
 @app.patch("/prompts/{prompt_id}", response_model=Prompt)
 def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(...)):
     """Partially updates an existing prompt.
-    
+
     This endpoint applies a partial update (PATCH semantics) to the prompt
     identified by `prompt_id`. Only fields explicitly provided in `prompt_data`
     are applied (unset fields are ignored). If `collection_id` is provided, it
@@ -326,20 +326,33 @@ def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(...)):
         if not collection:
             raise HTTPException(status_code=400, detail="Collection not found")
 
-    # Check for actual changes
+    # Check for actual changes by comparing field values
     updated_fields = prompt_data.model_dump(exclude_unset=True)
-    if updated_fields:
-        updated_prompt = existing.model_copy(
-            update=updated_fields
-        )
-        updated_prompt.updated_at = get_current_time()  # Update timestamp only if changes are made
-    else:
-        updated_prompt = existing  # No changes, keep the original
+    if not updated_fields:
+        return existing  # No changes, return the original without updating
+
+    # Check if any of the provided fields actually differ from existing values
+    has_changes = False
+    for field in updated_fields:
+        if field in ['title', 'content', 'description', 'collection_id']:
+            if getattr(existing, field) != updated_fields[field]:
+                has_changes = True
+                break
+
+    if not has_changes:
+        return existing  # No actual changes, return the original
+
+    updated_prompt = existing.model_copy(
+        update=updated_fields
+    )
+    # Preserve the original created_at timestamp and update updated_at
+    updated_prompt.created_at = existing.created_at
+    updated_prompt.updated_at = get_current_time()  # Update timestamp only if changes are made
 
     result = storage.update_prompt(prompt_id, updated_prompt)
 
     # Create new version if changes were made
-    if result and updated_fields:
+    if result:
         storage.create_prompt_version(prompt_id, result)
 
     return result
