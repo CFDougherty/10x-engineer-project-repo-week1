@@ -84,21 +84,20 @@ class PromptBase(BaseModel):
         collection_id (Optional[str]): Optional identifier for the collection the prompt belongs to.
     """
 
-    title: str = Field(..., min_length=1, max_length=200)
-    content: str = Field(..., min_length=1)
+    title: str = Field(..., max_length=200)
+    content: str = Field(...)
     description: Optional[str] = Field(None, max_length=500)
     collection_id: Optional[str] = Field(None, min_length=0)  # Allow empty string or None
 
     model_config = ConfigDict(
-        str_strip_whitespace=True,
-        str_min_length=1
+        str_strip_whitespace=True
     )
 
     @field_validator('title', 'content', mode='after')
     def validate_content_non_empty(cls, v):
         """Ensure content is not empty."""
         if not v or not v.strip():
-            raise ValueError("content must be a non-empty string")
+            raise ValueError("field must be a non-empty string")
         return v
 
     @field_validator('title', 'content', mode='after')
@@ -172,7 +171,7 @@ class Prompt(PromptBase):
         requiring a dict-like input.
     """
 
-    id: str = Field(default_factory=generate_id)
+    id: str = Field(default_factory=generate_id, min_length=1)
     created_at: datetime = Field(default_factory=get_current_time)
     updated_at: datetime = Field(default_factory=get_current_time)
     version: Optional[int] = Field(None, description="Current version number")
