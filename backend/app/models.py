@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-from uuid import uuid4
+from uuid import uuid4, UUID
 from pydantic import BaseModel, Field, field_validator
 import html
 
@@ -175,6 +175,15 @@ class Prompt(PromptBase):
     created_at: datetime = Field(default_factory=get_current_time)
     updated_at: datetime = Field(default_factory=get_current_time)
     version: Optional[int] = Field(None, description="Current version number")
+
+    @field_validator('id', mode='after')
+    def validate_id_is_uuid(cls, v):
+        """Ensure the id field is a valid UUID."""
+        try:
+            UUID(v)
+        except ValueError:
+            raise ValueError("id must be a valid UUID")
+        return v
 
     def __init__(self, **data):
         """Initialize a Prompt instance and sanitize HTML content."""

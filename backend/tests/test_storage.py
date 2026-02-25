@@ -613,8 +613,8 @@ class TestEdgeCases:
         assert collection1 == collection2
 
     def test_prompt_with_custom_id(self):
-        """Test creating a prompt with a custom ID."""
-        custom_id = "custom-id-123"
+        """Test creating a prompt with a custom UUID ID."""
+        custom_id = str(uuid4())
         prompt = Prompt(id=custom_id, title="Test", content="Content")
         assert prompt.id == custom_id
 
@@ -630,13 +630,13 @@ class TestEdgeCases:
         original = Prompt(title="Original", content="Original content")
         storage.create_prompt(original)
 
-        # Create a new prompt with a different ID
-        new_prompt = Prompt(id="different-id", title="New", content="New content")
+        # Create a new prompt with a different UUID ID
+        new_prompt = Prompt(id=str(uuid4()), title="New", content="New content")
         storage.update_prompt(original.id, new_prompt)
 
         # The original ID should still be used as the key
         retrieved = storage.get_prompt(original.id)
-        assert retrieved.id == "different-id"  # But the prompt's ID is now different
+        assert retrieved.id == new_prompt.id  # But the prompt's ID is now different
 
     def test_create_prompt_returns_same_instance(self):
         """Test that create_prompt returns the same instance that was passed in."""
