@@ -23,8 +23,11 @@ Note:
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi import status
 from typing import Optional
-from fastapi import FastAPI, HTTPException, Path, Body
+from fastapi import FastAPI, HTTPException, Path, Body, Request
+from fastapi.responses import JSONResponse
 from app.models import Prompt, PromptUpdateOptional
 
 from app.models import (
@@ -54,6 +57,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Exception handler to convert Pydantic validation errors (422) to HTTP 400
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Convert Pydantic validation errors to HTTP 400 Bad Request."""
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": "Validation error: " + str(exc.errors()[0]["msg"]) if exc.errors() else "Invalid input"},
+    )
+
 
 # ============== Health Check ==============
 
@@ -79,10 +91,13 @@ def health_check():
 @app.get("/prompts", response_model=PromptList)
 def list_prompts(
     collection_id: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    title: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None
 ):
     """Lists prompts, optionally filtered by collection and/or a search query.
-    
+
     This endpoint retrieves all prompts from storage, applies an optional
     collection filter, applies an optional text search filter, then sorts the
     resulting prompts by date (newest first).
@@ -92,26 +107,42 @@ def list_prompts(
             provided, only prompts belonging to this collection are returned.
         search: Optional search term used to filter prompts. If provided, only
             prompts matching the query are returned.
+        title: Optional title to filter by. If provided, only prompts with
+            matching title are returned.
+        limit: Optional maximum number of prompts to return.
+        offset: Optional offset for pagination.
 
     Returns:
         A `PromptList` containing the resulting list of prompts and the total
         number of prompts returned.
     """
-    prompts = storage.get_all_prompts()
-    
+    all_prompts = storage.get_all_prompts()
+
+    # Filter by title if specified
+    if title:
+        all_prompts = [p for p in all_prompts if p.title == title]
+
     # Filter by collection if specified
     if collection_id:
-        prompts = filter_prompts_by_collection(prompts, collection_id)
-    
+        all_prompts = filter_prompts_by_collection(all_prompts, collection_id)
+
     # Search if query provided
     if search:
-        prompts = search_prompts(prompts, search)
-    
+        all_prompts = search_prompts(all_prompts, search)
+
     # Sort by date (newest first)
-    # Note: There might be an issue with the sorting...
-    prompts = sort_prompts_by_date(prompts, descending=True)
-    
-    return PromptList(prompts=prompts, total=len(prompts))
+    all_prompts = sort_prompts_by_date(all_prompts, descending=True)
+
+    # Calculate total before pagination
+    total = len(all_prompts)
+
+    # Apply pagination
+    if offset is not None:
+        all_prompts = all_prompts[offset:]
+    if limit is not None:
+        all_prompts = all_prompts[:limit]
+
+    return PromptList(prompts=all_prompts, total=total)
 
 
 @app.get("/prompts/{prompt_id}", response_model=Prompt)
@@ -257,7 +288,7 @@ def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(...)):
             raise HTTPException(status_code=400, detail="Collection not found")
 
     # Check for actual changes
-    updated_fields = prompt_data.dict(exclude_unset=True)
+    updated_fields = prompt_data.model_dump(exclude_unset=True)
     if updated_fields:
         updated_prompt = existing.model_copy(
             update=updated_fields
@@ -354,6 +385,71 @@ def create_collection(collection_data: CollectionCreate):
     collection = Collection(**collection_data.model_dump())
     return storage.create_collection(collection)
 
+
+@app.put("/collections/{collection_id}", response_model=Collection)
+def update_collection(collection_id: str, collection_data: CollectionCreate):
+    """Update an existing collection.
+
+    Retrieves the collection identified by ``collection_id`` and replaces its fields
+    with the values provided in ``collection_data``.
+
+    Args:
+        collection_id: The unique identifier of the collection to update.
+        collection_data: The updated collection fields.
+
+    Returns:
+        The updated collection as persisted by the storage layer.
+
+    Raises:
+        HTTPException: If no collection exists for ``collection_id`` (404).
+    """
+    existing = storage.get_collection(collection_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Collection not found")
+
+    updated_collection = Collection(
+        id=existing.id,
+        name=collection_data.name,
+        description=collection_data.description,
+        created_at=existing.created_at
+    )
+
+    result = storage.create_collection(updated_collection)
+    return result
+
+@app.patch("/collections/{collection_id}", response_model=Collection)
+def patch_collection(collection_id: str, collection_data: CollectionCreate):
+    """Partially updates an existing collection.
+
+    This endpoint applies a partial update (PATCH semantics) to the collection
+    identified by ``collection_id``. Only fields explicitly provided in
+    ``collection_data`` are applied (unset fields are ignored).
+
+    Args:
+        collection_id: The unique identifier of the collection to update.
+        collection_data: Partial collection payload. Only fields set in this object are
+            applied to the existing collection.
+
+    Returns:
+        The persisted, updated collection model after applying any requested changes.
+
+    Raises:
+        HTTPException: If the collection does not exist (404).
+    """
+    existing = storage.get_collection(collection_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Collection not found")
+
+    # Update only the fields that are provided
+    updated_collection = Collection(
+        id=existing.id,
+        name=collection_data.name if collection_data.name is not None else existing.name,
+        description=collection_data.description if collection_data.description is not None else existing.description,
+        created_at=existing.created_at
+    )
+
+    result = storage.create_collection(updated_collection)
+    return result
 
 @app.delete("/collections/{collection_id}", status_code=204)
 def delete_collection(collection_id: str):

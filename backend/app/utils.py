@@ -42,31 +42,32 @@ def filter_prompts_by_collection(prompts: List[Prompt], collection_id: str) -> L
 
 
 def search_prompts(prompts: List[Prompt], query: str) -> List[Prompt]:
-    """Search prompts by a case-insensitive substring match on title/description.
+    """Search prompts by a case-insensitive substring match on title/description/content.
 
     This helper scans the provided `prompts` and returns only those where `query`
-    is contained in either `Prompt.title` or (if present) `Prompt.description`.
+    is contained in either `Prompt.title`, `Prompt.content`, or (if present) `Prompt.description`.
     Matching is case-insensitive and the relative order of matching prompts is
     preserved.
 
     Notes:
         - `Prompt.description` is optional (see `app.models.PromptBase`); prompts
-          with `description=None` are still eligible to match by title.
+          with `description=None` are still eligible to match by title or content.
         - An empty `query` will match all prompts because the empty string is a
           substring of any string.
 
     Args:
         prompts: List of `Prompt` instances to search.
-        query: Search text to look for within each prompt's title and optional
+        query: Search text to look for within each prompt's title, content, and optional
             description.
     Returns:
-        A list of `Prompt` instances whose title or description contains `query`
+        A list of `Prompt` instances whose title, content, or description contains `query`
         (case-insensitive), in the same order as the input list.
     """
     query_lower = query.lower()
     return [
         p for p in prompts 
         if query_lower in p.title.lower() or 
+           query_lower in p.content.lower() or 
            (p.description and query_lower in p.description.lower())
     ]
 
@@ -97,7 +98,7 @@ def validate_prompt_content(content: str) -> bool:
 
 def extract_variables(content: str) -> List[str]:
     """Extracts template variable names from prompt content.
-    
+
     This function scans `content` for template variables written in the form
     ``{{variable_name}}`` and returns the variable names without the surrounding
     braces.
@@ -117,5 +118,7 @@ def extract_variables(content: str) -> List[str]:
         If no variables are found, returns an empty list.
     """
     import re
+    if content is None:
+        return []
     pattern = r'\{\{(\w+)\}\}'
     return re.findall(pattern, content)

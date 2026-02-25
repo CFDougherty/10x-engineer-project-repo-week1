@@ -103,6 +103,9 @@ class Storage:
         """
         if prompt_id not in self._prompts:
             return None
+        # Preserve the original created_at timestamp
+        original_prompt = self._prompts[prompt_id]
+        prompt.created_at = original_prompt.created_at
         self._prompts[prompt_id] = prompt
         return prompt
 
@@ -123,6 +126,10 @@ class Storage:
         """
         if prompt_id not in self._prompts:
             return None
+        # Preserve the original ID and created_at timestamp, but update updated_at
+        original_prompt = self._prompts[prompt_id]
+        prompt.id = original_prompt.id
+        prompt.created_at = original_prompt.created_at
         self._prompts[prompt_id] = prompt
         return prompt
     

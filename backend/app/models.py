@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from uuid import uuid4
 from pydantic import BaseModel, Field, field_validator
 
@@ -75,6 +75,27 @@ class PromptBase(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
     collection_id: Optional[str] = None
 
+    @field_validator('title', 'content', mode='after')
+    def validate_non_whitespace(cls, v):
+        """Ensure title and content are not just whitespace."""
+        if isinstance(v, str) and not v.strip():
+            raise ValueError(f"{'Title' if 'title' in str(v) else 'Content'} cannot be empty or whitespace only")
+        return v
+
+    @field_validator('title', mode='after')
+    def validate_title_length(cls, v):
+        """Ensure title doesn't exceed maximum length."""
+        if len(v) > 200:
+            raise ValueError("Title must be 200 characters or less")
+        return v
+
+    @field_validator('description', mode='after')
+    def validate_description_length(cls, v):
+        """Ensure description doesn't exceed maximum length."""
+        if v is not None and len(v) > 500:
+            raise ValueError("Description must be 500 characters or less")
+        return v
+
 class PromptCreate(PromptBase):
     """Schema for creating a new prompt."""
     pass
@@ -119,6 +140,20 @@ class Prompt(PromptBase):
     updated_at: datetime = Field(default_factory=get_current_time)
     version: Optional[int] = Field(None, description="Current version number")
 
+    def __eq__(self, other):
+        """Compare prompts by their data, not by object identity.
+
+        Two prompts are considered equal if they have the same content fields.
+        This allows for comparison of prompts regardless of their IDs or timestamps.
+        """
+        if not isinstance(other, Prompt):
+            return False
+        # Compare all content fields, ignoring timestamps, version, and ID
+        return (self.title == other.title and
+                self.content == other.content and
+                self.description == other.description and
+                self.collection_id == other.collection_id)
+
     class Config:
         from_attributes = True
 
@@ -135,6 +170,13 @@ class CollectionBase(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
+
+    @field_validator('name', mode='after')
+    def validate_non_whitespace_name(cls, v):
+        """Ensure name is not just whitespace."""
+        if isinstance(v, str) and not v.strip():
+            raise ValueError("Name cannot be empty or whitespace only")
+        return v
 
 class CollectionCreate(CollectionBase):
     """Schema for creating a collection.
@@ -168,6 +210,14 @@ class Collection(CollectionBase):
 
     id: str = Field(default_factory=generate_id)
     created_at: datetime = Field(default_factory=get_current_time)
+
+    def __eq__(self, other):
+        """Compare collections by their data, not by object identity."""
+        if not isinstance(other, Collection):
+            return False
+        return (self.id == other.id and
+                self.name == other.name and
+                self.description == other.description)
 
     class Config:
         from_attributes = True
