@@ -177,11 +177,23 @@ class Prompt(PromptBase):
     updated_at: datetime = Field(default_factory=get_current_time)
     version: Optional[int] = Field(None, description="Current version number")
 
+    def __init__(self, **data):
+        """Initialize a Prompt instance and sanitize HTML content."""
+        # Sanitize HTML fields before setting them
+        if 'title' in data and data['title'] is not None:
+            data['title'] = sanitize_html(data['title'])
+        if 'content' in data and data['content'] is not None:
+            data['content'] = sanitize_html(data['content'])
+        if 'description' in data and data['description'] is not None:
+            data['description'] = sanitize_html(data['description'])
+        super().__init__(**data)
+
     def __setattr__(self, name, value):
         """Override attribute setting to update timestamp when content changes and sanitize HTML."""
         if name in ['title', 'content', 'description']:
             # Sanitize HTML to prevent XSS attacks
-            value = sanitize_html(value)
+            if value is not None:
+                value = sanitize_html(value)
             super().__setattr__(name, value)
             # Only update timestamp if this is not the initial creation
             if hasattr(self, 'updated_at'):
