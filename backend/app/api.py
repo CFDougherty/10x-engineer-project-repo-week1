@@ -32,6 +32,7 @@ from fastapi import HTTPException, status
 from fastapi.exceptions import RequestValidationError
 from fastapi import Request
 from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi import Depends, Request
 from app.models import Prompt, PromptUpdateOptional
 
 from app.models import (
@@ -60,6 +61,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Middleware to validate content type for JSON endpoints
+@app.middleware("http")
+async def validate_content_type(request: Request, call_next):
+    """Middleware to validate content type for JSON endpoints."""
+    if request.method == "POST" and request.url.path == "/prompts":
+        content_type = request.headers.get("content-type", "")
+        if "application/json" not in content_type:
+            return PlainTextResponse(
+                status_code=415,
+                content="Unsupported media type"
+            )
+    return await call_next(request)
 
 # Exception handler to convert Pydantic validation errors (422) to HTTP 400
 @app.exception_handler(RequestValidationError)
@@ -185,7 +199,7 @@ def get_prompt(prompt_id: str):
 
 
 @app.post("/prompts", response_model=Prompt, status_code=201)
-def create_prompt(prompt_data: PromptCreate):
+def create_prompt(prompt_data: PromptCreate, request: Request):
     """Creates a new prompt and persists it to storage.
 
     If `prompt_data.collection_id` is provided, this endpoint validates that the
@@ -196,6 +210,7 @@ def create_prompt(prompt_data: PromptCreate):
         prompt_data (PromptCreate): Payload containing the fields required to
             create a new prompt. If `collection_id` is provided, it must refer
             to an existing collection.
+        request: The request object to check content type.
 
     Returns:
         Prompt: The newly created prompt as stored in the database.
@@ -203,7 +218,14 @@ def create_prompt(prompt_data: PromptCreate):
     Raises:
         HTTPException: Raised with status code 400 if `prompt_data.collection_id`
             is provided but no matching collection is found.
+        HTTPException: Raised with status code 415 if the content type is not
+            application/json.
     """
+    # Validate content type
+    content_type = request.headers.get("content-type", "")
+    if "application/json" not in content_type:
+        raise HTTPException(status_code=415, detail="Unsupported media type")
+
     # Validate collection exists if provided
     if prompt_data.collection_id:
         collection = storage.get_collection(prompt_data.collection_id)
