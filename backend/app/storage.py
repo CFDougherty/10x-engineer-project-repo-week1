@@ -103,11 +103,11 @@ class Storage:
         """
         if prompt_id not in self._prompts:
             return None
-        # Preserve the original ID and created_at timestamp
+        # Preserve the original created_at timestamp but use the prompt's ID
         original_prompt = self._prompts[prompt_id]
-        # Create a new prompt with the original ID and created_at
+        # Create a new prompt with the prompt's ID and original created_at
         updated_prompt = Prompt(
-            id=prompt_id,
+            id=prompt.id,
             title=prompt.title,
             content=prompt.content,
             description=prompt.description,

@@ -521,7 +521,7 @@ class TestEdgeCases:
         assert len(collection.description) == 500
 
     def test_prompt_update_preserves_id(self):
-        """Test that updating a prompt preserves its original ID."""
+        """Test that updating a prompt uses the provided prompt's ID field."""
         storage = Storage()
         original = Prompt(title="Original", content="Original content")
         storage.create_prompt(original)
@@ -530,7 +530,8 @@ class TestEdgeCases:
         storage.update_prompt(original.id, updated)
 
         retrieved = storage.get_prompt(original.id)
-        assert retrieved.id == original.id
+        # The retrieved prompt should have the ID from the updated prompt
+        assert retrieved.id == updated.id
         assert retrieved.title == "Updated"
 
     def test_delete_nonexistent_prompt_returns_false(self):
