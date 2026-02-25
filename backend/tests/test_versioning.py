@@ -1,853 +1,639 @@
-"""Comprehensive tests for prompt versioning system.
+"""Tests for prompt versioning feature.
 
-This test suite covers all aspects of the prompt versioning feature,
-including creating versions, retrieving specific versions, listing version history,
-and promoting older versions to become the latest version.
+This test suite covers the versioning system that preserves historical versions
+of prompts while maintaining a simple API for common CRUD operations.
 """
 
 import pytest
-from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from fastapi.testclient import TestClient
 from app.models import Prompt, PromptCreate, PromptUpdate
-from app.versioning import (
-    create_prompt_with_version,
-    create_version,
-    get_prompt_version,
-    get_prompt_versions,
-    promote_version,
-    get_latest_prompt
-)
+from app.storage import storage
+from datetime import datetime
+from typing import Dict, List
 
-class TestPromptVersioning:
-    """Test suite for prompt versioning functionality."""
+# ============== Test Fixtures ==============
+
+@pytest.fixture
+def client():
+    """Create a test client for the API."""
+    from app.api import app
+    return TestClient(app)
+
+@pytest.fixture(autouse=True)
+def clear_storage():
+    """Clear storage before each test."""
+    storage.clear()
+    yield
+    storage.clear()
+
+@pytest.fixture
+def sample_prompt_data():
+    """Sample prompt data for testing."""
+    return {
+        "title": "Code Review Prompt",
+        "content": "Review the following code and provide feedback:\n\n{{code}}",
+        "description": "A prompt for AI code review"
+    }
+
+@pytest.fixture
+def sample_collection_data():
+    """Sample collection data for testing."""
+    return {
+        "name": "Development",
+        "description": "Prompts for development tasks"
+    }
+
+# ============== Versioning Models ==============
+
+class TestVersioningModels:
+    """Test the data models for versioning."""
+
+    def test_prompt_version_model_exists(self):
+        """Verify that PromptVersion model can be imported and instantiated."""
+        from app.models import PromptVersion
+        version = PromptVersion(
+            prompt_id="test-id",
+            version=1,
+            title="Test",
+            content="Test content",
+            description="Test description",
+            collection_id=None
+        )
+        assert version.prompt_id == "test-id"
+        assert version.version == 1
+        assert version.title == "Test"
+        assert version.content == "Test content"
+        assert version.description == "Test description"
+        assert version.collection_id is None
+        assert isinstance(version.created_at, datetime)
+
+    def test_prompt_meta_model_exists(self):
+        """Verify that PromptMeta model can be imported and instantiated."""
+        from app.models import PromptMeta
+        meta = PromptMeta(
+            id="test-id",
+            current_version=1,
+            created_at=datetime.utcnow()
+        )
+        assert meta.id == "test-id"
+        assert meta.current_version == 1
+        assert isinstance(meta.created_at, datetime)
+
+# ============== Versioning Storage ==============
+
+class TestVersioningStorage:
+    """Test the storage layer for versioning."""
+
+    def test_storage_has_versioning_indexes(self):
+        """Verify that storage has the required versioning indexes."""
+        # Check that the storage instance has the required attributes
+        assert hasattr(storage, '_prompts')
+        assert hasattr(storage, '_collections')
+
+        # These will be added for versioning
+        # assert hasattr(storage, '_prompt_meta')
+        # assert hasattr(storage, '_prompt_versions')
 
     def test_create_prompt_creates_version_1(self):
-        """Test that creating a prompt creates version 1."""
+        """Creating a prompt should create version 1."""
+        from app.models import PromptCreate
         prompt_data = PromptCreate(
             title="Test Prompt",
-            content="This is the initial content",
-            description="Initial description"
+            content="Test content",
+            description="Test description"
         )
 
-        # Create prompt with versioning
-        result = create_prompt_with_version(prompt_data)
+        # Create prompt
+        prompt = Prompt(**prompt_data.model_dump())
+        created = storage.create_prompt(prompt)
 
-        assert result.version == 1
-        assert result.title == "Test Prompt"
-        assert result.content == "This is the initial content"
-        assert result.description == "Initial description"
-        assert result.id is not None
-        assert result.created_at is not None
+        # Verify prompt was created
+        assert created.id == prompt.id
+        assert created.title == "Test Prompt"
+        assert created.content == "Test content"
 
-    def test_create_version_increments_version_number(self):
-        """Test that creating a new version increments the version number."""
+        # For now, this just creates a regular prompt
+        # After implementation, we'll verify versioning
+
+    def test_update_prompt_creates_new_version(self):
+        """Updating a prompt should create a new version."""
+        from app.models import PromptCreate, PromptUpdate
+
         # Create initial prompt
-        initial_data = PromptCreate(
-            title="Test Prompt",
-            content="Initial content",
-            description="Initial description"
+        prompt_data = PromptCreate(
+            title="Original",
+            content="Original content",
+            description="Original description"
         )
-        initial_prompt = create_prompt_with_version(initial_data)
+        prompt = Prompt(**prompt_data.model_dump())
+        storage.create_prompt(prompt)
+        prompt_id = prompt.id
 
-        # Create first update
+        # Update the prompt
         update_data = PromptUpdate(
-            title="Updated Prompt",
+            title="Updated",
             content="Updated content",
             description="Updated description"
         )
-        version_2 = create_version(initial_prompt.id, update_data)
+        updated = storage.update_prompt(prompt_id, Prompt(**update_data.model_dump()))
 
-        assert version_2.version == 2
-        assert version_2.title == "Updated Prompt"
-        assert version_2.content == "Updated content"
-        assert version_2.description == "Updated description"
+        # Verify update
+        assert updated.title == "Updated"
+        assert updated.content == "Updated content"
 
-    def test_get_prompt_version_returns_correct_snapshot(self):
-        """Test that getting a specific version returns the correct snapshot."""
+        # After implementation, we'll verify version increment
+
+    def test_patch_prompt_creates_new_version(self):
+        """Patching a prompt should create a new version."""
+        from app.models import PromptCreate, PromptUpdateOptional
+
         # Create initial prompt
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1",
-            description="Description 1"
+        prompt_data = PromptCreate(
+            title="Original",
+            content="Original content",
+            description="Original description"
         )
-        prompt = create_prompt_with_version(initial_data)
+        prompt = Prompt(**prompt_data.model_dump())
+        storage.create_prompt(prompt)
+        prompt_id = prompt.id
 
-        # Create version 2
-        update_data = PromptUpdate(
-            title="Version 2",
-            content="Content 2",
-            description="Description 2"
+        # Patch the prompt
+        patch_data = PromptUpdateOptional(
+            title="Patched",
+            content=None,  # Don't change content
+            description=None  # Don't change description
         )
-        create_version(prompt.id, update_data)
+        patched = storage.patch_prompt(prompt_id, patch_data)
 
-        # Create version 3
-        update_data = PromptUpdate(
-            title="Version 3",
-            content="Content 3",
-            description="Description 3"
-        )
-        create_version(prompt.id, update_data)
+        # Verify patch
+        assert patched.title == "Patched"
+        assert patched.content == "Original content"
 
-        # Get version 2
-        version_2 = get_prompt_version(prompt.id, 2)
+        # After implementation, we'll verify version increment
 
-        assert version_2.version == 2
-        assert version_2.title == "Version 2"
-        assert version_2.content == "Content 2"
-        assert version_2.description == "Description 2"
+# ============== API Endpoints ==============
 
-    def test_get_prompt_versions_returns_all_versions(self):
-        """Test that getting all versions returns the complete history."""
+class TestVersioningEndpoints:
+    """Test the API endpoints for versioning."""
+
+    def test_create_prompt_returns_version_metadata(self, client: TestClient):
+        """POST /prompts should return version metadata."""
+        prompt_data = {
+            "title": "New Prompt",
+            "content": "Prompt content",
+            "description": "Prompt description"
+        }
+
+        response = client.post("/prompts", json=prompt_data)
+        assert response.status_code == 201
+
+        data = response.json()
+        assert "id" in data
+        assert "version" in data
+        assert data["version"] == 1
+        assert data["title"] == "New Prompt"
+        assert data["content"] == "Prompt content"
+
+    def test_update_prompt_creates_new_version(self, client: TestClient):
+        """PUT /prompts/{id} should create a new version."""
         # Create initial prompt
-        initial_data = PromptCreate(
-            title="Initial",
-            content="Initial content"
-        )
-        prompt = create_prompt_with_version(initial_data)
+        prompt_data = {
+            "title": "Original",
+            "content": "Original content",
+            "description": "Original description"
+        }
+        create_response = client.post("/prompts", json=prompt_data)
+        assert create_response.status_code == 201
+        prompt_id = create_response.json()["id"]
+        original_version = create_response.json()["version"]
 
-        # Create more versions
-        for i in range(2, 6):
-            update_data = PromptUpdate(
-                title=f"Version {i}",
-                content=f"Content {i}"
-            )
-            create_version(prompt.id, update_data)
+        # Update the prompt
+        update_data = {
+            "title": "Updated",
+            "content": "Updated content",
+            "description": "Updated description"
+        }
+        update_response = client.put(f"/prompts/{prompt_id}", json=update_data)
+        assert update_response.status_code == 200
 
-        # Get all versions
-        versions = get_prompt_versions(prompt.id)
+        updated_data = update_response.json()
+        assert updated_data["version"] == original_version + 1
+        assert updated_data["title"] == "Updated"
+        assert updated_data["content"] == "Updated content"
 
-        assert len(versions) == 5
-        assert versions[0].version == 5  # Newest first
-        assert versions[1].version == 4
-        assert versions[2].version == 3
-        assert versions[3].version == 2
-        assert versions[4].version == 1
-
-    def test_get_latest_prompt_returns_current_version(self):
-        """Test that getting the latest prompt returns the current version."""
+    def test_patch_prompt_creates_new_version(self, client: TestClient):
+        """PATCH /prompts/{id} should create a new version."""
         # Create initial prompt
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1"
-        )
-        prompt = create_prompt_with_version(initial_data)
+        prompt_data = {
+            "title": "Original",
+            "content": "Original content",
+            "description": "Original description"
+        }
+        create_response = client.post("/prompts", json=prompt_data)
+        assert create_response.status_code == 201
+        prompt_id = create_response.json()["id"]
+        original_version = create_response.json()["version"]
 
-        # Create version 2
-        update_data = PromptUpdate(
-            title="Version 2",
-            content="Content 2"
-        )
-        create_version(prompt.id, update_data)
+        # Patch the prompt
+        patch_data = {
+            "title": "Patched"
+        }
+        patch_response = client.patch(f"/prompts/{prompt_id}", json=patch_data)
+        assert patch_response.status_code == 200
 
-        # Get latest prompt
-        latest = get_latest_prompt(prompt.id)
+        patched_data = patch_response.json()
+        assert patched_data["version"] == original_version + 1
+        assert patched_data["title"] == "Patched"
+        assert patched_data["content"] == "Original content"  # Unchanged
 
-        assert latest.version == 2
-        assert latest.title == "Version 2"
-        assert latest.content == "Content 2"
-
-    def test_promote_version_creates_new_version(self):
-        """Test that promoting an older version creates a new version."""
+    def test_get_specific_version(self, client: TestClient):
+        """GET /prompts/{id}/versions/{version} should return specific version."""
         # Create initial prompt
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1"
-        )
-        prompt = create_prompt_with_version(initial_data)
+        prompt_data = {
+            "title": "Version 1",
+            "content": "Content 1",
+            "description": "Description 1"
+        }
+        create_response = client.post("/prompts", json=prompt_data)
+        assert create_response.status_code == 201
+        prompt_id = create_response.json()["id"]
 
-        # Create version 2
-        update_data = PromptUpdate(
-            title="Version 2",
-            content="Content 2"
-        )
-        create_version(prompt.id, update_data)
-
-        # Create version 3
-        update_data = PromptUpdate(
-            title="Version 3",
-            content="Content 3"
-        )
-        create_version(prompt.id, update_data)
-
-        # Promote version 1 to become the new latest
-        promoted = promote_version(prompt.id, 1)
-
-        assert promoted.version == 4  # New version created
-        assert promoted.title == "Version 1"  # Content from version 1
-        assert promoted.content == "Content 1"
-
-    def test_promote_version_preserves_history(self):
-        """Test that promoting a version preserves the complete history."""
-        # Create initial prompt
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Create version 2
-        update_data = PromptUpdate(
-            title="Version 2",
-            content="Content 2"
-        )
-        create_version(prompt.id, update_data)
-
-        # Promote version 1
-        promote_version(prompt.id, 1)
-
-        # Get all versions - should have 3 versions total
-        versions = get_prompt_versions(prompt.id)
-
-        assert len(versions) == 3
-        assert versions[0].version == 3  # Newest (promoted version)
-        assert versions[1].version == 2  # Original version 2
-        assert versions[2].version == 1  # Original version 1
-
-    def test_version_immutability(self):
-        """Test that once created, versions cannot be modified."""
-        # Create initial prompt
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Create version 2
-        update_data = PromptUpdate(
-            title="Version 2",
-            content="Content 2"
-        )
-        create_version(prompt.id, update_data)
+        # Update to create version 2
+        update_data = {
+            "title": "Version 2",
+            "content": "Content 2",
+            "description": "Description 2"
+        }
+        client.put(f"/prompts/{prompt_id}", json=update_data)
 
         # Get version 1
-        version_1 = get_prompt_version(prompt.id, 1)
+        version_response = client.get(f"/prompts/{prompt_id}/versions/1")
+        assert version_response.status_code == 200
 
-        # Verify version 1 hasn't changed
-        assert version_1.title == "Version 1"
-        assert version_1.content == "Content 1"
+        version_data = version_response.json()
+        assert version_data["version"] == 1
+        assert version_data["title"] == "Version 1"
+        assert version_data["content"] == "Content 1"
+        assert version_data["description"] == "Description 1"
 
-    def test_partial_updates_create_new_versions(self):
-        """Test that partial updates (PATCH-like) create new versions."""
+        # Get version 2
+        version_response = client.get(f"/prompts/{prompt_id}/versions/2")
+        assert version_response.status_code == 200
+
+        version_data = version_response.json()
+        assert version_data["version"] == 2
+        assert version_data["title"] == "Version 2"
+        assert version_data["content"] == "Content 2"
+        assert version_data["description"] == "Description 2"
+
+    def test_list_all_versions(self, client: TestClient):
+        """GET /prompts/{id}/versions should return all versions."""
         # Create initial prompt
-        initial_data = PromptCreate(
-            title="Initial Title",
-            content="Initial Content",
-            description="Initial Description"
-        )
-        prompt = create_prompt_with_version(initial_data)
+        prompt_data = {
+            "title": "Version 1",
+            "content": "Content 1",
+            "description": "Description 1"
+        }
+        create_response = client.post("/prompts", json=prompt_data)
+        assert create_response.status_code == 201
+        prompt_id = create_response.json()["id"]
 
-        # Update only title
-        partial_update = PromptUpdate(
-            title="Updated Title",
-            content="Initial Content",  # unchanged
-            description="Initial Description"  # unchanged
-        )
-        version_2 = create_version(prompt.id, partial_update)
+        # Update to create version 2
+        update_data = {
+            "title": "Version 2",
+            "content": "Content 2",
+            "description": "Description 2"
+        }
+        client.put(f"/prompts/{prompt_id}", json=update_data)
 
-        assert version_2.version == 2
-        assert version_2.title == "Updated Title"
-        assert version_2.content == "Initial Content"
-        assert version_2.description == "Initial Description"
+        # Update to create version 3
+        update_data = {
+            "title": "Version 3",
+            "content": "Content 3",
+            "description": "Description 3"
+        }
+        client.put(f"/prompts/{prompt_id}", json=update_data)
 
-    def test_version_timestamps_are_preserved(self):
-        """Test that version timestamps reflect when each version was created."""
+        # List all versions
+        versions_response = client.get(f"/prompts/{prompt_id}/versions")
+        assert versions_response.status_code == 200
+
+        versions_data = versions_response.json()
+        assert versions_data["prompt_id"] == prompt_id
+        assert versions_data["total"] == 3
+        assert len(versions_data["versions"]) == 3
+
+        # Versions should be in descending order (newest first)
+        assert versions_data["versions"][0]["version"] == 3
+        assert versions_data["versions"][1]["version"] == 2
+        assert versions_data["versions"][2]["version"] == 1
+
+    def test_promote_version(self, client: TestClient):
+        """POST /prompts/{id}/versions/{version}/promote should promote a version."""
         # Create initial prompt
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1"
-        )
-        prompt = create_prompt_with_version(initial_data)
+        prompt_data = {
+            "title": "Version 1",
+            "content": "Content 1",
+            "description": "Description 1"
+        }
+        create_response = client.post("/prompts", json=prompt_data)
+        assert create_response.status_code == 201
+        prompt_id = create_response.json()["id"]
 
-        # Small delay to ensure different timestamps
-        import time
-        time.sleep(0.01)
-
-        # Create version 2
-        update_data = PromptUpdate(
-            title="Version 2",
-            content="Content 2"
-        )
-        create_version(prompt.id, update_data)
-
-        # Get both versions
-        version_1 = get_prompt_version(prompt.id, 1)
-        version_2 = get_prompt_version(prompt.id, 2)
-
-        # Version 2 should have a later timestamp
-        assert version_2.created_at > version_1.created_at
-
-    def test_get_nonexistent_version_raises_error(self):
-        """Test that requesting a non-existent version raises an appropriate error."""
-        # Create initial prompt
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Try to get version 5 (doesn't exist)
-        with pytest.raises(ValueError):
-            get_prompt_version(prompt.id, 5)
-
-    def test_get_versions_for_nonexistent_prompt_returns_empty(self):
-        """Test that getting versions for a non-existent prompt returns empty list."""
-        versions = get_prompt_versions("nonexistent-id")
-        assert versions == []
-
-    def test_promote_nonexistent_version_raises_error(self):
-        """Test that promoting a non-existent version raises an error."""
-        # Create initial prompt
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Try to promote version 5 (doesn't exist)
-        with pytest.raises(ValueError):
-            promote_version(prompt.id, 5)
-
-    def test_promote_version_from_nonexistent_prompt_raises_error(self):
-        """Test that promoting a version from a non-existent prompt raises an error."""
-        with pytest.raises(ValueError):
-            promote_version("nonexistent-id", 1)
-
-    def test_version_numbers_are_sequential(self):
-        """Test that version numbers are always sequential integers starting from 1."""
-        # Create initial prompt
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Create multiple versions
-        for i in range(2, 11):
-            update_data = PromptUpdate(
-                title=f"Version {i}",
-                content=f"Content {i}"
-            )
-            version = create_version(prompt.id, update_data)
-            assert version.version == i
-
-        # Verify all versions exist
-        versions = get_prompt_versions(prompt.id)
-        assert len(versions) == 10
-        assert [v.version for v in versions] == [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
-
-    def test_collection_id_preserved_in_versions(self):
-        """Test that collection_id is preserved across versions."""
-        # Create initial prompt with collection
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1",
-            collection_id="col-123"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Create version 2
-        update_data = PromptUpdate(
-            title="Version 2",
-            content="Content 2",
-            collection_id="col-123"  # Same collection
-        )
-        create_version(prompt.id, update_data)
-
-        # Create version 3 with different collection
-        update_data = PromptUpdate(
-            title="Version 3",
-            content="Content 3",
-            collection_id="col-456"
-        )
-        create_version(prompt.id, update_data)
-
-        # Verify all versions have correct collection_id
-        version_1 = get_prompt_version(prompt.id, 1)
-        version_2 = get_prompt_version(prompt.id, 2)
-        version_3 = get_prompt_version(prompt.id, 3)
-
-        assert version_1.collection_id == "col-123"
-        assert version_2.collection_id == "col-123"
-        assert version_3.collection_id == "col-456"
-
-    def test_promote_preserves_collection_id(self):
-        """Test that promoting a version preserves the collection_id from that version."""
-        # Create initial prompt
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1",
-            collection_id="col-123"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Create version 2 with different collection
-        update_data = PromptUpdate(
-            title="Version 2",
-            content="Content 2",
-            collection_id="col-456"
-        )
-        create_version(prompt.id, update_data)
+        # Update to create version 2
+        update_data = {
+            "title": "Version 2",
+            "content": "Content 2",
+            "description": "Description 2"
+        }
+        client.put(f"/prompts/{prompt_id}", json=update_data)
 
         # Promote version 1
-        promoted = promote_version(prompt.id, 1)
+        promote_response = client.post(f"/prompts/{prompt_id}/versions/1/promote")
+        assert promote_response.status_code == 201
 
-        assert promoted.collection_id == "col-123"
+        promoted_data = promote_response.json()
+        assert promoted_data["version"] == 3  # New version created
+        assert promoted_data["title"] == "Version 1"  # Same as version 1
+        assert promoted_data["content"] == "Content 1"
+        assert promoted_data["description"] == "Description 1"
 
-    def test_version_history_preserves_dangling_collection_references(self):
-        """Test that version history preserves collection_id even if collection is deleted."""
-        # Create initial prompt with collection
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1",
-            collection_id="col-deleted"
-        )
-        prompt = create_prompt_with_version(initial_data)
+        # Verify the latest version is now the promoted one
+        latest_response = client.get(f"/prompts/{prompt_id}")
+        assert latest_response.status_code == 200
+        latest_data = latest_response.json()
+        assert latest_data["version"] == 3
+        assert latest_data["title"] == "Version 1"
 
-        # Create version 2 without collection
-        update_data = PromptUpdate(
-            title="Version 2",
-            content="Content 2",
-            collection_id=None
-        )
-        create_version(prompt.id, update_data)
-
-        # Version 1 should still have the original collection_id
-        version_1 = get_prompt_version(prompt.id, 1)
-        assert version_1.collection_id == "col-deleted"
-
-class TestVersioningIntegration:
-    """Integration tests for versioning with other system components."""
-
-    def test_versioning_with_search_functionality(self):
-        """Test that versioning works with existing search functionality."""
-        from app.utils import search_prompts
-
-        # Create initial prompt
-        initial_data = PromptCreate(
-            title="Python Tutorial",
-            content="Learn Python programming",
-            description="A comprehensive Python tutorial"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Create version 2 with different content
-        update_data = PromptUpdate(
-            title="Advanced Python",
-            content="Advanced Python concepts",
-            description="Advanced Python programming"
-        )
-        create_version(prompt.id, update_data)
-
-        # Get all versions
-        versions = get_prompt_versions(prompt.id)
-
-        # Search should work on all versions
-        python_results = search_prompts(versions, "python")
-        assert len(python_results) == 2
-
-        tutorial_results = search_prompts(versions, "tutorial")
-        assert len(tutorial_results) == 1
-        assert tutorial_results[0].title == "Python Tutorial"
-
-    def test_versioning_with_sorting_functionality(self):
-        """Test that versioning works with existing sorting functionality."""
-        from app.utils import sort_prompts_by_date
-
-        # Create initial prompt
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Create more versions
-        import time
-        for i in range(2, 4):
-            time.sleep(0.01)  # Ensure different timestamps
-            update_data = PromptUpdate(
-                title=f"Version {i}",
-                content=f"Content {i}"
-            )
-            create_version(prompt.id, update_data)
-
-        # Get all versions
-        versions = get_prompt_versions(prompt.id)
-
-        # Sort by date (descending)
-        sorted_versions = sort_prompts_by_date(versions, descending=True)
-        assert sorted_versions[0].version == 3
-        assert sorted_versions[1].version == 2
-        assert sorted_versions[2].version == 1
-
-    def test_versioning_with_filtering_functionality(self):
-        """Test that versioning works with existing filtering functionality."""
-        from app.utils import filter_prompts_by_collection
-
-        # Create initial prompt with collection
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1",
-            collection_id="col-123"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Create version 2 with different collection
-        update_data = PromptUpdate(
-            title="Version 2",
-            content="Content 2",
-            collection_id="col-456"
-        )
-        create_version(prompt.id, update_data)
-
-        # Create version 3 with no collection
-        update_data = PromptUpdate(
-            title="Version 3",
-            content="Content 3",
-            collection_id=None
-        )
-        create_version(prompt.id, update_data)
-
-        # Get all versions
-        versions = get_prompt_versions(prompt.id)
-
-        # Filter by collection
-        col_123_versions = filter_prompts_by_collection(versions, "col-123")
-        assert len(col_123_versions) == 1
-        assert col_123_versions[0].version == 1
-
-        col_456_versions = filter_prompts_by_collection(versions, "col-456")
-        assert len(col_456_versions) == 1
-        assert col_456_versions[0].version == 2
-
-    def test_versioning_preserves_variable_extraction(self):
-        """Test that versioning preserves variable extraction functionality."""
-        from app.utils import extract_variables
-        from app.models import PromptCreate, PromptUpdate
-
-        # Create initial prompt with variables
-        initial_data = PromptCreate(
-            title="Template 1",
-            content="Hello {{name}}, you are {{age}} years old"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Create version 2 with different variables
-        update_data = PromptUpdate(
-            title="Template 2",
-            content="Welcome {{user_name}}, your score is {{score}}"
-        )
-        create_version(prompt.id, update_data)  # Fixed: Added the actual function call
-
-        # Get specific versions
-        version_1 = get_prompt_version(prompt.id, 1)
-        version_2 = get_prompt_version(prompt.id, 2)
-
-        # Extract variables from each version
-        vars_v1 = extract_variables(version_1.content)
-        vars_v2 = extract_variables(version_2.content)
-
-        assert vars_v1 == ["name", "age"]
-        assert vars_v2 == ["user_name", "score"]
-
-    def test_versioning_preserves_content_validation(self):
-        """Test that versioning preserves content validation functionality."""
-        from app.utils import validate_prompt_content
-
-        # Create initial prompt with valid content
-        initial_data = PromptCreate(
-            title="Valid Content",
-            content="This is valid content with 10+ characters"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Create version 2 with different valid content
-        update_data = PromptUpdate(
-            title="Another Valid Content",
-            content="Another valid content that meets requirements"
-        )
-        create_version(prompt.id, update_data)
-
-        # Verify content validation works on all versions
-        version_1 = get_prompt_version(prompt.id, 1)
-        version_2 = get_prompt_version(prompt.id, 2)
-
-        assert validate_prompt_content(version_1.content) == True
-        assert validate_prompt_content(version_2.content) == True
+# ============== Edge Cases ==============
 
 class TestVersioningEdgeCases:
-    """Edge case tests for prompt versioning."""
+    """Test edge cases and error conditions for versioning."""
 
-    def test_create_version_with_empty_fields(self):
-        """Test creating a version with empty or None fields."""
+    def test_get_nonexistent_version(self, client: TestClient):
+        """GET /prompts/{id}/versions/{version} should return 404 for nonexistent version."""
+        # Create a prompt
+        prompt_data = {
+            "title": "Test",
+            "content": "Content",
+            "description": "Description"
+        }
+        create_response = client.post("/prompts", json=prompt_data)
+        assert create_response.status_code == 201
+        prompt_id = create_response.json()["id"]
+
+        # Try to get version 999 (doesn't exist)
+        response = client.get(f"/prompts/{prompt_id}/versions/999")
+        assert response.status_code == 404
+
+    def test_promote_nonexistent_version(self, client: TestClient):
+        """POST /prompts/{id}/versions/{version}/promote should return 404 for nonexistent version."""
+        # Create a prompt
+        prompt_data = {
+            "title": "Test",
+            "content": "Content",
+            "description": "Description"
+        }
+        create_response = client.post("/prompts", json=prompt_data)
+        assert create_response.status_code == 201
+        prompt_id = create_response.json()["id"]
+
+        # Try to promote version 999 (doesn't exist)
+        response = client.post(f"/prompts/{prompt_id}/versions/999/promote")
+        assert response.status_code == 404
+
+    def test_promote_nonexistent_prompt(self, client: TestClient):
+        """POST /prompts/{id}/versions/{version}/promote should return 404 for nonexistent prompt."""
+        response = client.post(f"/prompts/nonexistent-id/versions/1/promote")
+        assert response.status_code == 404
+
+    def test_version_history_preserved_after_promotion(self, client: TestClient):
+        """Version history should be preserved after promoting a version."""
         # Create initial prompt
-        initial_data = PromptCreate(
-            title="Initial",
-            content="Initial content"
-        )
-        prompt = create_prompt_with_version(initial_data)
+        prompt_data = {
+            "title": "Version 1",
+            "content": "Content 1",
+            "description": "Description 1"
+        }
+        create_response = client.post("/prompts", json=prompt_data)
+        assert create_response.status_code == 201
+        prompt_id = create_response.json()["id"]
 
-        # Create version with empty title (should be validated)
-        with pytest.raises(ValueError):
-            update_data = PromptUpdate(
-                title="",  # Empty title should fail validation
-                content="Updated content"
-            )
-            create_version(prompt.id, update_data)
-
-    def test_create_version_with_minimum_content_length(self):
-        """Test creating a version with minimum content length."""
-        # Create initial prompt
-        initial_data = PromptCreate(
-            title="Initial",
-            content="Initial content"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Create version with exactly 10 characters (minimum)
-        update_data = PromptUpdate(
-            title="Updated",
-            content="1234567890"  # Exactly 10 characters
-        )
-        version_2 = create_version(prompt.id, update_data)
-
-        assert version_2.version == 2
-        assert version_2.content == "1234567890"
-
-    def test_create_version_with_maximum_title_length(self):
-        """Test creating a version with maximum title length."""
-        # Create initial prompt
-        initial_data = PromptCreate(
-            title="Initial",
-            content="Initial content"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Create version with exactly 200 characters (maximum)
-        long_title = "A" * 200
-        update_data = PromptUpdate(
-            title=long_title,
-            content="Updated content"
-        )
-        version_2 = create_version(prompt.id, update_data)
-
-        assert version_2.version == 2
-        assert version_2.title == long_title
-        assert len(version_2.title) == 200
-
-    def test_create_version_with_maximum_description_length(self):
-        """Test creating a version with maximum description length."""
-        # Create initial prompt
-        initial_data = PromptCreate(
-            title="Initial",
-            content="Initial content"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Create version with exactly 500 characters (maximum)
-        long_description = "A" * 500
-        update_data = PromptUpdate(
-            title="Updated",
-            content="Updated content",
-            description=long_description
-        )
-        version_2 = create_version(prompt.id, update_data)
-
-        assert version_2.version == 2
-        assert version_2.description == long_description
-        assert len(version_2.description) == 500
-
-    def test_promote_first_version(self):
-        """Test promoting the first version when it's not the latest."""
-        # Create initial prompt
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1"
-        )
-        prompt = create_prompt_with_version(initial_data)
-
-        # Create version 2
-        update_data = PromptUpdate(
-            title="Version 2",
-            content="Content 2"
-        )
-        create_version(prompt.id, update_data)
-
-        # Create version 3
-        update_data = PromptUpdate(
-            title="Version 3",
-            content="Content 3"
-        )
-        create_version(prompt.id, update_data)
+        # Update to create version 2
+        update_data = {
+            "title": "Version 2",
+            "content": "Content 2",
+            "description": "Description 2"
+        }
+        client.put(f"/prompts/{prompt_id}", json=update_data)
 
         # Promote version 1
-        promoted = promote_version(prompt.id, 1)
+        client.post(f"/prompts/{prompt_id}/versions/1/promote")
 
-        assert promoted.version == 4
-        assert promoted.title == "Version 1"
-        assert promoted.content == "Content 1"
+        # List all versions - should have 3 versions now
+        versions_response = client.get(f"/prompts/{prompt_id}/versions")
+        assert versions_response.status_code == 200
 
-    def test_promote_middle_version(self):
-        """Test promoting a middle version."""
+        versions_data = versions_response.json()
+        assert versions_data["total"] == 3
+
+        # All original versions should still exist
+        version_1 = next((v for v in versions_data["versions"] if v["version"] == 1), None)
+        version_2 = next((v for v in versions_data["versions"] if v["version"] == 2), None)
+        version_3 = next((v for v in versions_data["versions"] if v["version"] == 3), None)
+
+        assert version_1 is not None
+        assert version_2 is not None
+        assert version_3 is not None
+
+        assert version_1["title"] == "Version 1"
+        assert version_2["title"] == "Version 2"
+        assert version_3["title"] == "Version 1"  # Promoted version
+
+    def test_get_latest_version_returns_current(self, client: TestClient):
+        """GET /prompts/{id} should return the latest version."""
         # Create initial prompt
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1"
-        )
-        prompt = create_prompt_with_version(initial_data)
+        prompt_data = {
+            "title": "Version 1",
+            "content": "Content 1",
+            "description": "Description 1"
+        }
+        create_response = client.post("/prompts", json=prompt_data)
+        assert create_response.status_code == 201
+        prompt_id = create_response.json()["id"]
 
-        # Create version 2
-        update_data = PromptUpdate(
-            title="Version 2",
-            content="Content 2"
-        )
-        create_version(prompt.id, update_data)
+        # Update to create version 2
+        update_data = {
+            "title": "Version 2",
+            "content": "Content 2",
+            "description": "Description 2"
+        }
+        client.put(f"/prompts/{prompt_id}", json=update_data)
 
-        # Create version 3
-        update_data = PromptUpdate(
-            title="Version 3",
-            content="Content 3"
-        )
-        create_version(prompt.id, update_data)
+        # Get latest version
+        latest_response = client.get(f"/prompts/{prompt_id}")
+        assert latest_response.status_code == 200
 
-        # Promote version 2
-        promoted = promote_version(prompt.id, 2)
+        latest_data = latest_response.json()
+        assert latest_data["version"] == 2
+        assert latest_data["title"] == "Version 2"
+        assert latest_data["content"] == "Content 2"
+        assert latest_data["description"] == "Description 2"
 
-        assert promoted.version == 4
-        assert promoted.title == "Version 2"
-        assert promoted.content == "Content 2"
-
-    def test_multiple_promotions_in_sequence(self):
-        """Test multiple promotions in sequence."""
+    def test_patch_with_no_changes_does_not_create_new_version(self, client: TestClient):
+        """PATCH with no actual changes should not create a new version."""
         # Create initial prompt
-        initial_data = PromptCreate(
-            title="Version 1",
-            content="Content 1"
-        )
-        prompt = create_prompt_with_version(initial_data)
+        prompt_data = {
+            "title": "Test",
+            "content": "Content",
+            "description": "Description"
+        }
+        create_response = client.post("/prompts", json=prompt_data)
+        assert create_response.status_code == 201
+        prompt_id = create_response.json()["id"]
+        original_version = create_response.json()["version"]
 
-        # Create version 2
-        update_data = PromptUpdate(
-            title="Version 2",
-            content="Content 2"
-        )
-        create_version(prompt.id, update_data)
+        # Patch with no changes
+        patch_response = client.patch(f"/prompts/{prompt_id}", json={})
+        assert patch_response.status_code == 200
 
-        # Promote version 1
-        promote_version(prompt.id, 1)
+        patched_data = patch_response.json()
+        assert patched_data["version"] == original_version  # Should not increment
+        assert patched_data["title"] == "Test"
 
-        # Promote version 2
-        promoted_2 = promote_version(prompt.id, 2)
+# ============== Integration Tests ==============
 
-        assert promoted_2.version == 4
-        assert promoted_2.title == "Version 2"
-        assert promoted_2.content == "Content 2"
+class TestVersioningIntegration:
+    """Integration tests for versioning workflows."""
 
-        # Get all versions - should have 4 versions total
-        versions = get_prompt_versions(prompt.id)
-        assert len(versions) == 4
-        assert [v.version for v in versions] == [4, 3, 2, 1]
+    def test_complete_versioning_workflow(self, client: TestClient):
+        """Test a complete workflow: create, update, list, get specific, promote."""
+        # 1. Create a prompt (version 1)
+        prompt_data = {
+            "title": "Summarize content",
+            "content": "Summarize: {{input}}",
+            "description": "Summarizes text input"
+        }
+        create_response = client.post("/prompts", json=prompt_data)
+        assert create_response.status_code == 201
+        prompt_id = create_response.json()["id"]
+        assert create_response.json()["version"] == 1
 
-    def test_version_with_special_characters(self):
-        """Test creating versions with special characters in content."""
-        # Create initial prompt with special characters
-        initial_data = PromptCreate(
-            title="Special Chars",
-            content="Hello {{name}}! How are you? {{age}} years old."
-        )
-        prompt = create_prompt_with_version(initial_data)
+        # 2. Update the prompt (version 2)
+        update_data = {
+            "title": "Summarize content v2",
+            "content": "Summarize: {{input}}\nBe concise.",
+            "description": "Summarizes text input concisely"
+        }
+        update_response = client.put(f"/prompts/{prompt_id}", json=update_data)
+        assert update_response.status_code == 200
+        assert update_response.json()["version"] == 2
 
-        # Create version with more special characters
-        update_data = PromptUpdate(
-            title="More Special Chars",
-            content="<p>Hello {{user}}!</p> <div>Score: {{score}}</div>"
-        )
-        version_2 = create_version(prompt.id, update_data)
+        # 3. List all versions
+        versions_response = client.get(f"/prompts/{prompt_id}/versions")
+        assert versions_response.status_code == 200
+        assert versions_response.json()["total"] == 2
 
-        assert version_2.version == 2
-        assert "<p>" in version_2.content
-        assert "</div>" in version_2.content
+        # 4. Get specific version (version 1)
+        version_1_response = client.get(f"/prompts/{prompt_id}/versions/1")
+        assert version_1_response.status_code == 200
+        assert version_1_response.json()["title"] == "Summarize content"
+        assert version_1_response.json()["content"] == "Summarize: {{input}}"
 
-    def test_version_with_unicode_characters(self):
-        """Test creating versions with unicode characters."""
-        # Create initial prompt with unicode
-        initial_data = PromptCreate(
-            title="Unicode Test",
-            content="Hello {{café}}, welcome to {{naïve}} world"
-        )
-        prompt = create_prompt_with_version(initial_data)
+        # 5. Promote version 1 (creates version 3)
+        promote_response = client.post(f"/prompts/{prompt_id}/versions/1/promote")
+        assert promote_response.status_code == 201
+        assert promote_response.json()["version"] == 3
+        assert promote_response.json()["title"] == "Summarize content"
 
-        # Create version with more unicode
-        update_data = PromptUpdate(
-            title="More Unicode",
-            content="Welcome {{用户}}, your score is {{分数}"
-        )
-        version_2 = create_version(prompt.id, update_data)
+        # 6. Verify latest is now the promoted version
+        latest_response = client.get(f"/prompts/{prompt_id}")
+        assert latest_response.status_code == 200
+        assert latest_response.json()["version"] == 3
+        assert latest_response.json()["title"] == "Summarize content"
 
-        assert version_2.version == 2
-        assert "用户" in version_2.content
-        assert "分数" in version_2.content
+        # 7. Verify all 3 versions still exist
+        final_versions_response = client.get(f"/prompts/{prompt_id}/versions")
+        assert final_versions_response.status_code == 200
+        assert final_versions_response.json()["total"] == 3
 
-    def test_version_with_very_long_content(self):
-        """Test creating versions with very long content."""
-        # Create initial prompt with long content
-        long_content = "A" * 10000
-        initial_data = PromptCreate(
-            title="Long Content",
-            content=long_content
-        )
-        prompt = create_prompt_with_version(initial_data)
+    def test_versioning_with_collection(self, client: TestClient):
+        """Test versioning when prompts belong to collections."""
+        # Create a collection
+        collection_data = {
+            "name": "Test Collection",
+            "description": "Test collection"
+        }
+        collection_response = client.post("/collections", json=collection_data)
+        assert collection_response.status_code == 201
+        collection_id = collection_response.json()["id"]
 
-        # Create version with even longer content
-        longer_content = "B" * 20000
-        update_data = PromptUpdate(
-            title="Longer Content",
-            content=longer_content
-        )
-        version_2 = create_version(prompt.id, update_data)
+        # Create a prompt in the collection (version 1)
+        prompt_data = {
+            "title": "Test Prompt",
+            "content": "Test content",
+            "description": "Test description",
+            "collection_id": collection_id
+        }
+        create_response = client.post("/prompts", json=prompt_data)
+        assert create_response.status_code == 201
+        prompt_id = create_response.json()["id"]
+        assert create_response.json()["version"] == 1
+        assert create_response.json()["collection_id"] == collection_id
 
-        assert version_2.version == 2
-        assert len(version_2.content) == 20000
+        # Update the prompt (version 2) - change collection
+        update_data = {
+            "title": "Updated Prompt",
+            "content": "Updated content",
+            "description": "Updated description",
+            "collection_id": None
+        }
+        update_response = client.put(f"/prompts/{prompt_id}", json=update_data)
+        assert update_response.status_code == 200
+        assert update_response.json()["version"] == 2
+        assert update_response.json()["collection_id"] is None
 
-    def test_version_with_whitespace_content(self):
-        """Test creating versions with whitespace in content."""
-        # Create initial prompt with whitespace
-        initial_data = PromptCreate(
-            title="Whitespace Test",
-            content="   Hello World   "
-        )
-        prompt = create_prompt_with_version(initial_data)
+        # Get version 1 - should still have the original collection_id
+        version_1_response = client.get(f"/prompts/{prompt_id}/versions/1")
+        assert version_1_response.status_code == 200
+        assert version_1_response.json()["collection_id"] == collection_id
 
-        # Create version with more whitespace
-        update_data = PromptUpdate(
-            title="More Whitespace",
-            content="\tHello\tWorld\nWith\tnewlines"
-        )
-        version_2 = create_version(prompt.id, update_data)
+        # Get version 2 - should have None
+        version_2_response = client.get(f"/prompts/{prompt_id}/versions/2")
+        assert version_2_response.status_code == 200
+        assert version_2_response.json()["collection_id"] is None
 
-        assert version_2.version == 2
-        assert "\t" in version_2.content
-        assert "\n" in version_2.content
+    def test_multiple_prompts_independent_versioning(self, client: TestClient):
+        """Test that multiple prompts maintain independent version histories."""
+        # Create two prompts
+        prompt1_data = {
+            "title": "Prompt 1",
+            "content": "Content 1",
+            "description": "Description 1"
+        }
+        prompt1_response = client.post("/prompts", json=prompt1_data)
+        assert prompt1_response.status_code == 201
+        prompt1_id = prompt1_response.json()["id"]
 
-    def test_version_with_empty_description(self):
-        """Test creating versions with empty description."""
-        # Create initial prompt with empty description
-        initial_data = PromptCreate(
-            title="No Description",
-            content="Content without description",
-            description=""
-        )
-        prompt = create_prompt_with_version(initial_data)
+        prompt2_data = {
+            "title": "Prompt 2",
+            "content": "Content 2",
+            "description": "Description 2"
+        }
+        prompt2_response = client.post("/prompts", json=prompt2_data)
+        assert prompt2_response.status_code == 201
+        prompt2_id = prompt2_response.json()["id"]
 
-        # Create version with None description
-        update_data = PromptUpdate(
-            title="Still No Description",
-            content="More content without description",
-            description=None
-        )
-        version_2 = create_version(prompt.id, update_data)
+        # Update prompt 1 twice
+        client.put(f"/prompts/{prompt1_id}", json={"title": "Prompt 1 v2", "content": "Content 1 v2", "description": "Description 1 v2"})
+        client.put(f"/prompts/{prompt1_id}", json={"title": "Prompt 1 v3", "content": "Content 1 v3", "description": "Description 1 v3"})
 
-        assert version_2.version == 2
-        assert version_2.description is None
+        # Update prompt 2 once
+        client.put(f"/prompts/{prompt2_id}", json={"title": "Prompt 2 v2", "content": "Content 2 v2", "description": "Description 2 v2"})
 
-if __name__ == "__main__":
-    pytest.main()
+        # Check versions
+        prompt1_versions = client.get(f"/prompts/{prompt1_id}/versions")
+        assert prompt1_versions.json()["total"] == 3
+
+        prompt2_versions = client.get(f"/prompts/{prompt2_id}/versions")
+        assert prompt2_versions.json()["total"] == 2

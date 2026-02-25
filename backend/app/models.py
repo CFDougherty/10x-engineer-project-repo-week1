@@ -178,6 +178,87 @@ class Collection(CollectionBase):
         from_attributes = True
 
 
+# ============== Versioning Models ==============
+
+class PromptVersion(BaseModel):
+    """Represent an immutable version of a prompt.
+
+    This model stores a snapshot of prompt fields at a specific point in time.
+    Versions are immutable once created and maintain the state of the prompt
+    at the time they were created.
+
+    Attributes:
+        prompt_id: The unique identifier of the parent prompt.
+        version: The version number (starts at 1 and increments by 1).
+        title: The prompt title at this version.
+        content: The prompt content at this version.
+        description: The prompt description at this version (optional).
+        collection_id: The collection identifier at this version (optional).
+        created_at: Timestamp when this version was created.
+    """
+
+    prompt_id: str
+    version: int
+    title: str = Field(..., min_length=1, max_length=200)
+    content: str = Field(..., min_length=1)
+    description: Optional[str] = Field(None, max_length=500)
+    collection_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=get_current_time)
+
+    class Config:
+        from_attributes = True
+
+class PromptMeta(BaseModel):
+    """Metadata for a prompt's version history.
+
+    This model tracks the current version and creation timestamp for a prompt.
+    It serves as the "logical prompt" that users interact with, while versions
+    store the immutable history.
+
+    Attributes:
+        id: Unique identifier for the prompt.
+        current_version: The highest version number for this prompt.
+        created_at: Timestamp when the prompt was first created.
+    """
+
+    id: str
+    current_version: int
+    created_at: datetime = Field(default_factory=get_current_time)
+
+    class Config:
+        from_attributes = True
+
+class VersionSummary(BaseModel):
+    """Summary information for a prompt version.
+
+    This model provides a lightweight representation of a version for listing
+    purposes, without including the full content.
+
+    Attributes:
+        version: The version number.
+        created_at: Timestamp when the version was created.
+        title: The prompt title at this version.
+        description: The prompt description at this version (optional).
+    """
+
+    version: int
+    created_at: datetime
+    title: str
+    description: Optional[str]
+
+class VersionList(BaseModel):
+    """Container for listing all versions of a prompt.
+
+    Attributes:
+        prompt_id: The unique identifier of the prompt.
+        versions: List of version summaries.
+        total: The total number of versions.
+    """
+
+    prompt_id: str
+    versions: List[VersionSummary]
+    total: int
+
 # ============== Response Models ==============
 
 class PromptList(BaseModel):
