@@ -157,13 +157,18 @@ class TestVersioningStorage:
         storage.create_prompt(prompt)
         prompt_id = prompt.id
 
-        # Patch the prompt
-        patch_data = PromptUpdateOptional(
+        # Patch the prompt - construct a proper Prompt object with updated fields
+        existing = storage.get_prompt(prompt_id)
+        patched_prompt = Prompt(
+            id=prompt_id,
             title="Patched",
-            content=None,  # Don't change content
-            description=None  # Don't change description
+            content=existing.content,  # Keep original content
+            description=existing.description,  # Keep original description
+            collection_id=existing.collection_id,
+            created_at=existing.created_at,
+            updated_at=existing.updated_at
         )
-        patched = storage.patch_prompt(prompt_id, patch_data)
+        patched = storage.patch_prompt(prompt_id, patched_prompt)
 
         # Verify patch
         assert patched.title == "Patched"

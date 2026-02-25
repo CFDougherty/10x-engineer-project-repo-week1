@@ -5,7 +5,7 @@ In a production environment, this would be replaced with a database.
 """
 
 from typing import Dict, List, Optional
-from app.models import Prompt, Collection
+from app.models import Prompt, Collection, PromptVersion, PromptMeta, VersionSummary
 
 
 class Storage:
@@ -24,6 +24,8 @@ class Storage:
         """
         self._prompts: Dict[str, Prompt] = {}
         self._collections: Dict[str, Collection] = {}
+        self._prompt_meta: Dict[str, PromptMeta] = {}
+        self._prompt_versions: Dict[str, List[PromptVersion]] = {}
     
     # ============== Prompt Operations ==============
     
@@ -90,6 +92,26 @@ class Storage:
             This method updates the entry keyed by ``prompt_id`` (not necessarily
             ``prompt.id``). Callers should ensure these identifiers match to avoid
             storing a prompt under an unexpected key.
+
+        Args:
+            prompt_id: The unique identifier of the prompt to update.
+            prompt: The new prompt object to store for the given ID.
+
+        Returns:
+            The updated :class:`app.models.Prompt` if ``prompt_id`` exists in storage;
+            otherwise, ``None``.
+        """
+        if prompt_id not in self._prompts:
+            return None
+        self._prompts[prompt_id] = prompt
+        return prompt
+
+    def patch_prompt(self, prompt_id: str, prompt: Prompt) -> Optional[Prompt]:
+        """Partially update an existing prompt in in-memory storage.
+
+        This method is similar to :meth:`update_prompt`, but is designed for partial
+        updates where only specific fields may have changed. It simply replaces the
+        prompt stored under ``prompt_id`` with the provided prompt instance.
 
         Args:
             prompt_id: The unique identifier of the prompt to update.
@@ -262,14 +284,140 @@ class Storage:
             collection. If no prompts match, an empty list is returned.
         """
         return [prompt for prompt in self._prompts.values() if prompt.collection_id == collection_id]
+
+    # ============== Versioning Operations ==============
+
+    def create_prompt_version(self, prompt_id: str, prompt: Prompt) -> PromptVersion:
+        """Create a new version of a prompt.
+
+        Creates a new version snapshot of the prompt and updates the prompt metadata.
+        If this is the first version, creates the prompt metadata as well.
+
+        Args:
+            prompt_id: The unique identifier of the prompt.
+            prompt: The prompt data to store as a version.
+
+        Returns:
+            The created PromptVersion instance.
+        """
+        # Get current version number
+        current_version = 1
+        if prompt_id in self._prompt_meta:
+            meta = self._prompt_meta[prompt_id]
+            current_version = meta.current_version + 1
+
+        # Create version snapshot
+        version = PromptVersion(
+            prompt_id=prompt_id,
+            version=current_version,
+            title=prompt.title,
+            content=prompt.content,
+            description=prompt.description,
+            collection_id=prompt.collection_id
+        )
+
+        # Initialize versions list if needed
+        if prompt_id not in self._prompt_versions:
+            self._prompt_versions[prompt_id] = []
+
+        # Add the version
+        self._prompt_versions[prompt_id].append(version)
+
+        # Update or create metadata
+        if prompt_id in self._prompt_meta:
+            meta = self._prompt_meta[prompt_id]
+            meta.current_version = current_version
+        else:
+            meta = PromptMeta(
+                id=prompt_id,
+                current_version=current_version
+            )
+            self._prompt_meta[prompt_id] = meta
+
+        # Update the prompt in storage with version number
+        prompt.version = current_version
+        self._prompts[prompt_id] = prompt
+
+        return version
+
+    def get_prompt_version(self, prompt_id: str, version: int) -> Optional[PromptVersion]:
+        """Retrieve a specific version of a prompt.
+
+        Args:
+            prompt_id: The unique identifier of the prompt.
+            version: The version number to retrieve.
+
+        Returns:
+            The PromptVersion if it exists, otherwise None.
+        """
+        if prompt_id not in self._prompt_versions:
+            return None
+
+        versions = self._prompt_versions[prompt_id]
+        for v in versions:
+            if v.version == version:
+                return v
+        return None
+
+    def get_all_prompt_versions(self, prompt_id: str) -> List[PromptVersion]:
+        """Retrieve all versions of a prompt.
+
+        Args:
+            prompt_id: The unique identifier of the prompt.
+
+        Returns:
+            A list of PromptVersion instances, sorted by version number (newest first).
+        """
+        if prompt_id not in self._prompt_versions:
+            return []
+
+        versions = self._prompt_versions[prompt_id]
+        return sorted(versions, key=lambda v: v.version, reverse=True)
+
+    def promote_prompt_version(self, prompt_id: str, version: int) -> Optional[Prompt]:
+        """Promote an old version to become the new latest version.
+
+        Creates a new version that is a copy of the specified old version.
+
+        Args:
+            prompt_id: The unique identifier of the prompt.
+            version: The version number to promote.
+
+        Returns:
+            The new Prompt instance created from the promoted version, or None if
+            the version doesn't exist.
+        """
+        old_version = self.get_prompt_version(prompt_id, version)
+        if not old_version:
+            return None
+
+        # Create new version with incremented version number
+        new_version_num = self._prompt_meta[prompt_id].current_version + 1
+
+        # Create new prompt from the old version
+        new_prompt = Prompt(
+            id=prompt_id,
+            title=old_version.title,
+            content=old_version.content,
+            description=old_version.description,
+            collection_id=old_version.collection_id
+        )
+
+        # Create the new version
+        self.create_prompt_version(prompt_id, new_prompt)
+
+        # Return the updated prompt
+        return self.get_prompt(prompt_id)
     # ============== Utility ==============
     
     def clear(self):
         """Remove all prompts and collections from in-memory storage.
 
         This method clears the internal dictionaries used by :class:`Storage`:
-        ``self._prompts`` (mapping prompt IDs to :class:`app.models.Prompt`) and
-        ``self._collections`` (mapping collection IDs to :class:`app.models.Collection`).
+        ``self._prompts`` (mapping prompt IDs to :class:`app.models.Prompt`),
+        ``self._collections`` (mapping collection IDs to :class:`app.models.Collection`),
+        ``self._prompt_meta`` (prompt metadata), and ``self._prompt_versions``
+        (version history).
 
         This is a destructive, in-memory-only operation intended for scenarios like
         tests or resetting ephemeral development state. It does not affect any
@@ -280,6 +428,8 @@ class Storage:
         """
         self._prompts.clear()
         self._collections.clear()
+        self._prompt_meta.clear()
+        self._prompt_versions.clear()
 
 
 # Global storage instance

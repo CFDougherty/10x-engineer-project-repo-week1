@@ -25,7 +25,6 @@ def get_current_time() -> datetime:
     """
     return datetime.utcnow()
 
-
 # ============== Prompt Models ==============
 class PromptUpdateOptional(BaseModel):
     """Schema for updating a prompt with optional fields.
@@ -60,7 +59,7 @@ class PromptUpdateOptional(BaseModel):
         if isinstance(v, str) and not v.strip():
             return None
         return v
-    
+
 class PromptBase(BaseModel):
     """Base schema for a prompt.
 
@@ -76,11 +75,9 @@ class PromptBase(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
     collection_id: Optional[str] = None
 
-
 class PromptCreate(PromptBase):
     """Schema for creating a new prompt."""
     pass
-
 
 class PromptUpdate(PromptBase):
     """Schema for updating an existing prompt.
@@ -93,7 +90,6 @@ class PromptUpdate(PromptBase):
         Inherited from PromptBase.
     """
     pass
-
 
 class Prompt(PromptBase):
     """Represent a persisted prompt entity.
@@ -110,6 +106,7 @@ class Prompt(PromptBase):
             to the current time via ``get_current_time``.
         updated_at: Timestamp indicating when the prompt was last updated.
             Defaults to the current time via ``get_current_time``.
+        version: Current version number of the prompt.
 
     Notes:
         The inner ``Config`` sets ``from_attributes = True`` to allow creating
@@ -120,10 +117,10 @@ class Prompt(PromptBase):
     id: str = Field(default_factory=generate_id)
     created_at: datetime = Field(default_factory=get_current_time)
     updated_at: datetime = Field(default_factory=get_current_time)
+    version: Optional[int] = Field(None, description="Current version number")
 
     class Config:
         from_attributes = True
-
 
 # ============== Collection Models ==============
 
@@ -139,7 +136,6 @@ class CollectionBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
 
-
 class CollectionCreate(CollectionBase):
     """Schema for creating a collection.
 
@@ -151,7 +147,6 @@ class CollectionCreate(CollectionBase):
         (Inherited): All attributes are inherited from CollectionBase.
     """
     pass
-
 
 class Collection(CollectionBase):
     """Represent a persisted collection with a unique identifier and timestamps.
@@ -176,7 +171,6 @@ class Collection(CollectionBase):
 
     class Config:
         from_attributes = True
-
 
 # ============== Versioning Models ==============
 
@@ -273,19 +267,17 @@ class PromptList(BaseModel):
     prompts: List[Prompt]
     total: int
 
-
 class CollectionList(BaseModel):
     """Container for a paginated list of collections.
 
     Attributes:
-        collections (List[Collection]): The list of `Collection` items returned for the
-            current page/query.
+        collections (List[Collection]): The list of `Collection` items returned for
+            the current page/query.
         total (int): The total number of collections matching the query across all pages.
     """
 
     collections: List[Collection]
     total: int
-
 
 class HealthResponse(BaseModel):
     """Response model for the service health check endpoint.

@@ -31,7 +31,8 @@ from app.models import (
     Prompt, PromptCreate, PromptUpdate,
     Collection, CollectionCreate,
     PromptList, CollectionList, HealthResponse,
-    get_current_time
+    get_current_time,
+    PromptVersion, VersionList, VersionSummary
 )
 from app.storage import storage
 from app.utils import sort_prompts_by_date, filter_prompts_by_collection, search_prompts
@@ -160,9 +161,14 @@ def create_prompt(prompt_data: PromptCreate):
         collection = storage.get_collection(prompt_data.collection_id)
         if not collection:
             raise HTTPException(status_code=400, detail="Collection not found")
-    
+
     prompt = Prompt(**prompt_data.model_dump())
-    return storage.create_prompt(prompt)
+    created_prompt = storage.create_prompt(prompt)
+
+    # Create version 1
+    storage.create_prompt_version(prompt.id, prompt)
+
+    return created_prompt
 
 
 @app.put("/prompts/{prompt_id}", response_model=Prompt)
@@ -191,7 +197,7 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
     existing = storage.get_prompt(prompt_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Prompt not found")
-    
+
     # Validate collection if provided
     if prompt_data.collection_id:
         collection = storage.get_collection(prompt_data.collection_id)
@@ -207,8 +213,14 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
         created_at=existing.created_at,
         updated_at=get_current_time()
     )
-    
-    return storage.update_prompt(prompt_id, updated_prompt)
+
+    result = storage.update_prompt(prompt_id, updated_prompt)
+
+    # Create new version
+    if result:
+        storage.create_prompt_version(prompt_id, result)
+
+    return result
 
 
 @app.patch("/prompts/{prompt_id}", response_model=Prompt)
@@ -253,8 +265,14 @@ def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(...)):
         updated_prompt.updated_at = get_current_time()  # Update timestamp only if changes are made
     else:
         updated_prompt = existing  # No changes, keep the original
-    
-    return storage.update_prompt(prompt_id, updated_prompt)
+
+    result = storage.update_prompt(prompt_id, updated_prompt)
+
+    # Create new version if changes were made
+    if result and updated_fields:
+        storage.create_prompt_version(prompt_id, result)
+
+    return result
 
 
 @app.delete("/prompts/{prompt_id}", status_code=204)
@@ -357,7 +375,7 @@ def delete_collection(collection_id: str):
     """
     # Retrieve prompts in the collection
     prompts = storage.get_prompts_by_collection_id(collection_id)
-    
+
     # Delete each prompt within the collection
     for prompt in prompts:
         storage.delete_prompt(prompt.id)
@@ -366,3 +384,97 @@ def delete_collection(collection_id: str):
         raise HTTPException(status_code=404, detail="Collection not found")
 
     return None
+
+# ============== Versioning Endpoints ==============
+
+@app.get("/prompts/{prompt_id}/versions", response_model=VersionList)
+def list_prompt_versions(prompt_id: str):
+    """List all versions of a prompt.
+
+    Retrieves all versions of the specified prompt, sorted by version number
+    (newest first).
+
+    Args:
+        prompt_id: The unique identifier of the prompt.
+
+    Returns:
+        VersionList: A list of all versions with metadata.
+
+    Raises:
+        HTTPException: If the prompt does not exist (404).
+    """
+    prompt = storage.get_prompt(prompt_id)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    versions = storage.get_all_prompt_versions(prompt_id)
+
+    # Create version summaries
+    version_summaries = [
+        VersionSummary(
+            version=v.version,
+            created_at=v.created_at,
+            title=v.title,
+            description=v.description
+        )
+        for v in versions
+    ]
+
+    return VersionList(
+        prompt_id=prompt_id,
+        versions=version_summaries,
+        total=len(versions)
+    )
+
+@app.get("/prompts/{prompt_id}/versions/{version}", response_model=PromptVersion)
+def get_prompt_version(prompt_id: str, version: int):
+    """Get a specific version of a prompt.
+
+    Retrieves the specified version of a prompt as an immutable snapshot.
+
+    Args:
+        prompt_id: The unique identifier of the prompt.
+        version: The version number to retrieve.
+
+    Returns:
+        PromptVersion: The version snapshot.
+
+    Raises:
+        HTTPException: If the prompt or version does not exist (404).
+    """
+    prompt = storage.get_prompt(prompt_id)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    version_data = storage.get_prompt_version(prompt_id, version)
+    if not version_data:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    return version_data
+
+@app.post("/prompts/{prompt_id}/versions/{version}/promote", response_model=Prompt, status_code=201)
+def promote_prompt_version(prompt_id: str, version: int):
+    """Promote an old version to become the new latest version.
+
+    Creates a new version that is a copy of the specified old version, making it
+    the current version.
+
+    Args:
+        prompt_id: The unique identifier of the prompt.
+        version: The version number to promote.
+
+    Returns:
+        Prompt: The new latest version of the prompt.
+
+    Raises:
+        HTTPException: If the prompt or version does not exist (404).
+    """
+    prompt = storage.get_prompt(prompt_id)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    promoted_prompt = storage.promote_prompt_version(prompt_id, version)
+    if not promoted_prompt:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    return promoted_prompt
