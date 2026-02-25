@@ -87,15 +87,20 @@ pytest -v
 | Method | Endpoint | Success | Notes |
 |---|---|---:|---|
 | GET | `/health` | 200 | Returns `{ "status": "healthy", "version": "…" }` |
-| GET | `/prompts` | 200 | Returns `{ prompts: Prompt[], total: number }`. Optional query params: `collection_id` (exact match), `search` (matches **title** and **description**). |
+| GET | `/prompts` | 200 | Returns `{ prompts: Prompt[], total: number }`. Optional query params: `collection_id` (exact match), `search` (matches **title** and **description**), `title` (exact match), `limit`, `offset` |
 | GET | `/prompts/{prompt_id}` | 200 | 404 if not found |
 | POST | `/prompts` | 201 | 400 if `collection_id` is provided but does not exist |
 | PUT | `/prompts/{prompt_id}` | 200 | Full replace (requires at least `title` and `content`). 404 if not found. 400 if `collection_id` is invalid |
 | PATCH | `/prompts/{prompt_id}` | 200 | Partial update (send only fields you want to change). Empty `{}` leaves the resource unchanged. 404 if not found. 400 if `collection_id` is invalid |
 | DELETE | `/prompts/{prompt_id}` | 204 | 404 if not found |
+| GET | `/prompts/{prompt_id}/versions` | 200 | List all versions of a prompt |
+| GET | `/prompts/{prompt_id}/versions/{version}` | 200 | Get a specific version of a prompt |
+| POST | `/prompts/{prompt_id}/versions/{version}/promote` | 201 | Promote an old version to become the new latest version |
 | GET | `/collections` | 200 | Returns `{ collections: Collection[], total: number }` |
 | GET | `/collections/{collection_id}` | 200 | 404 if not found |
 | POST | `/collections` | 201 |  |
+| PUT | `/collections/{collection_id}` | 200 | Full replace. 404 if not found |
+| PATCH | `/collections/{collection_id}` | 200 | Partial update (send only fields you want to change). Empty `{}` leaves the resource unchanged. 404 if not found |
 | DELETE | `/collections/{collection_id}` | 204 | Deletes the collection **and all prompts** that reference it. 404 if not found |
 
 ### Data model notes

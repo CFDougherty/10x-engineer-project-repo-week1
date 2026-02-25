@@ -116,6 +116,10 @@ All fields optional. Empty or whitespace-only strings are normalized to `null`.
 | `name` | string | yes | 1–100 chars |
 | `description` | string \| null | no | max 500 chars |
 
+#### CollectionUpdateOptional (request body for PATCH)
+
+All fields optional. Empty or whitespace-only strings are normalized to `null`.
+
 #### Collection (response)
 
 ```json
@@ -124,6 +128,56 @@ All fields optional. Empty or whitespace-only strings are normalized to `null`.
   "name": "Onboarding",
   "description": "Prompts used during onboarding",
   "created_at": "2026-02-18T19:51:56.546992"
+}
+```
+
+### Versioning Models
+
+#### PromptVersion (response)
+
+```json
+{
+  "prompt_id": "d010f7fa-10a5-4d1f-9b16-2dc2c75eafd3",
+  "version": 1,
+  "title": "Summarize content",
+  "content": "Summarize: {{input}}",
+  "description": "General-purpose summarization prompt",
+  "collection_id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
+  "created_at": "2026-02-18T18:24:20.454842"
+}
+```
+
+#### VersionSummary (response)
+
+```json
+{
+  "version": 1,
+  "created_at": "2026-02-18T18:24:20.454842",
+  "title": "Summarize content",
+  "description": "General-purpose summarization prompt"
+}
+```
+
+#### VersionList (response)
+
+```json
+{
+  "prompt_id": "d010f7fa-10a5-4d1f-9b16-2dc2c75eafd3",
+  "versions": [
+    {
+      "version": 2,
+      "created_at": "2026-02-18T19:00:00.000000",
+      "title": "Summarize content (v2)",
+      "description": "Updated version"
+    },
+    {
+      "version": 1,
+      "created_at": "2026-02-18T18:24:20.454842",
+      "title": "Summarize content",
+      "description": "General-purpose summarization prompt"
+    }
+  ],
+  "total": 2
 }
 ```
 
@@ -841,6 +895,131 @@ console.log(await res.json());
 
 ---
 
+#### PUT `/collections/{collection_id}`
+Replace (fully update) an existing collection.
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---:|---|
+| `collection_id` | string | yes | Collection UUID |
+
+**Request body**: `CollectionCreate`
+
+**curl**
+
+```bash
+curl -sS -X PUT "http://localhost:8000/collections/<collection_id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Onboarding Updated",
+    "description": "Updated description for onboarding prompts"
+  }'
+```
+
+**fetch**
+
+```javascript
+const collectionId = '<collection_id>';
+
+const res = await fetch(`http://localhost:8000/collections/${collectionId}`, {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    name: 'Onboarding Updated',
+    description: 'Updated description for onboarding prompts',
+  }),
+});
+
+if (!res.ok) throw new Error(await res.text());
+console.log(await res.json());
+```
+
+**Success response — 200**
+
+```json
+{
+  "id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
+  "name": "Onboarding Updated",
+  "description": "Updated description for onboarding prompts",
+  "created_at": "2026-02-18T19:51:56.546992"
+}
+```
+
+**Errors**
+
+- `404 Not Found`
+
+```json
+{ "detail": "Collection not found" }
+```
+
+---
+
+#### PATCH `/collections/{collection_id}`
+Partially update an existing collection.
+
+Notes:
+- Only fields you send are updated; omitted fields remain unchanged.
+- Empty or whitespace-only strings are normalized to `null`.
+- Sending an empty JSON object (`{}`) returns the collection unchanged.
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---:|---|
+| `collection_id` | string | yes | Collection UUID |
+
+**Request body**: `CollectionUpdateOptional`
+
+**curl**
+
+```bash
+curl -sS -X PATCH "http://localhost:8000/collections/<collection_id>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "Updated description"
+  }'
+```
+
+**fetch**
+
+```javascript
+const collectionId = '<collection_id>';
+
+const res = await fetch(`http://localhost:8000/collections/${collectionId}`, {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    description: 'Updated description',
+  }),
+});
+
+if (!res.ok) throw new Error(await res.text());
+console.log(await res.json());
+```
+
+**Success response — 200**
+
+```json
+{
+  "id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
+  "name": "Onboarding",
+  "description": "Updated description",
+  "created_at": "2026-02-18T19:51:56.546992"
+}
+```
+
+**Errors**
+
+- `404 Not Found`
+
+```json
+{ "detail": "Collection not found" }
+```
+
+---
+
 #### DELETE `/collections/{collection_id}`
 Delete a collection by ID.
 
@@ -881,4 +1060,179 @@ No response body.
 
 ```json
 { "detail": "Collection not found" }
+```
+
+---
+
+### Prompt Versioning
+
+#### GET `/prompts/{prompt_id}/versions`
+List all versions of a prompt.
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---:|---|
+| `prompt_id` | string | yes | Prompt UUID |
+
+**curl**
+
+```bash
+curl -sS "http://localhost:8000/prompts/<prompt_id>/versions"
+```
+
+**fetch**
+
+```javascript
+const promptId = '<prompt_id>';
+const res = await fetch(`http://localhost:8000/prompts/${promptId}/versions`);
+if (!res.ok) throw new Error(await res.text());
+console.log(await res.json());
+```
+
+**Success response — 200**
+
+```json
+{
+  "prompt_id": "d010f7fa-10a5-4d1f-9b16-2dc2c75eafd3",
+  "versions": [
+    {
+      "version": 2,
+      "created_at": "2026-02-18T19:00:00.000000",
+      "title": "Summarize content (v2)",
+      "description": "Updated version"
+    },
+    {
+      "version": 1,
+      "created_at": "2026-02-18T18:24:20.454842",
+      "title": "Summarize content",
+      "description": "General-purpose summarization prompt"
+    }
+  ],
+  "total": 2
+}
+```
+
+**Errors**
+
+- `404 Not Found`
+
+```json
+{ "detail": "Prompt not found" }
+```
+
+---
+
+#### GET `/prompts/{prompt_id}/versions/{version}`
+Get a specific version of a prompt.
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---:|---|
+| `prompt_id` | string | yes | Prompt UUID |
+| `version` | integer | yes | Version number |
+
+**curl**
+
+```bash
+curl -sS "http://localhost:8000/prompts/<prompt_id>/versions/1"
+```
+
+**fetch**
+
+```javascript
+const promptId = '<prompt_id>';
+const res = await fetch(`http://localhost:8000/prompts/${promptId}/versions/1`);
+if (!res.ok) throw new Error(await res.text());
+console.log(await res.json());
+```
+
+**Success response — 200**
+
+```json
+{
+  "prompt_id": "d010f7fa-10a5-4d1f-9b16-2dc2c75eafd3",
+  "version": 1,
+  "title": "Summarize content",
+  "content": "Summarize: {{input}}",
+  "description": "General-purpose summarization prompt",
+  "collection_id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
+  "created_at": "2026-02-18T18:24:20.454842"
+}
+```
+
+**Errors**
+
+- `404 Not Found`
+
+```json
+{ "detail": "Prompt not found" }
+```
+
+or
+
+```json
+{ "detail": "Version not found" }
+```
+
+---
+
+#### POST `/prompts/{prompt_id}/versions/{version}/promote`
+Promote an old version to become the new latest version.
+
+This creates a new version that is a copy of the specified old version, making it the current version.
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---:|---|
+| `prompt_id` | string | yes | Prompt UUID |
+| `version` | integer | yes | Version number to promote |
+
+**curl**
+
+```bash
+curl -sS -X POST "http://localhost:8000/prompts/<prompt_id>/versions/1/promote"
+```
+
+**fetch**
+
+```javascript
+const promptId = '<prompt_id>';
+const res = await fetch(`http://localhost:8000/prompts/${promptId}/versions/1/promote`, {
+  method: 'POST',
+});
+
+if (!res.ok) throw new Error(await res.text());
+console.log(await res.json());
+```
+
+**Success response — 201**
+
+```json
+{
+  "id": "d010f7fa-10a5-4d1f-9b16-2dc2c75eafd3",
+  "title": "Summarize content",
+  "content": "Summarize: {{input}}",
+  "description": "General-purpose summarization prompt",
+  "collection_id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
+  "created_at": "2026-02-18T18:24:20.454842",
+  "updated_at": "2026-02-18T19:30:00.000000",
+  "version": 3
+}
+```
+
+**Errors**
+
+- `404 Not Found`
+
+```json
+{ "detail": "Prompt not found" }
+```
+
+or
+
+```json
+{ "detail": "Version not found" }
 ```
