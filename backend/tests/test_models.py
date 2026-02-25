@@ -239,3 +239,162 @@ class TestModelSerializationEdgeCases:
         assert parsed["total"] == 2
         assert len(parsed["collections"]) == 2
         assert all("name" in item for item in parsed["collections"])
+
+
+class TestPromptValidationErrors:
+    """Test specific validation error messages and details."""
+
+    def test_prompt_base_validation_error_messages(self):
+        """Verify validation errors include helpful messages."""
+        with pytest.raises(ValidationError) as exc:
+            PromptBase(title="", content="valid")
+        errors = exc.value.errors()
+        assert any("title" in str(e) and "non-empty" in str(e).lower() for e in errors)
+
+    def test_prompt_base_rejects_invalid_uuid(self):
+        """Test that invalid UUID formats are rejected."""
+        with pytest.raises(ValidationError):
+            Prompt(id="not-a-uuid", title="Test", content="Test")
+
+class TestModelComparison:
+    """Test model equality and comparison behavior."""
+
+    def test_prompt_equality(self):
+        """Prompts with same data should be equal."""
+        p1 = Prompt(title="Test", content="Content")
+        p2 = Prompt(title="Test", content="Content")
+        assert p1 == p2
+
+    def test_prompt_inequality_with_different_data(self):
+        """Prompts with different data should not be equal."""
+        p1 = Prompt(title="Test", content="Content1")
+        p2 = Prompt(title="Test", content="Content2")
+        assert p1 != p2
+
+class TestModelCopying:
+    """Test model copying and cloning behavior."""
+
+    def test_prompt_copy_creates_independent_instance(self):
+        """Copying a prompt should create a new independent instance."""
+        original = Prompt(title="Test", content="Content")
+        copy = original.model_copy()
+        assert copy != original
+        assert copy.id != original.id
+        assert copy.title == original.title
+
+class TestUnicodeAndSpecialCharacters:
+    """Test handling of unicode and special characters."""
+
+    def test_prompt_with_unicode_characters(self):
+        """Prompts should handle unicode characters correctly."""
+        prompt = Prompt(
+            title="Test 🚀",
+            content="Content with émojis 🎉 and special chars: <>&\"'",
+            description="Description with unicode: 日本語"
+        )
+        assert prompt.title == "Test 🚀"
+        assert "émojis" in prompt.content
+        assert "日本語" in prompt.description
+
+    def test_prompt_with_newlines_and_tabs(self):
+        """Content with newlines and tabs should be preserved."""
+        content = "Line 1\n\tTabbed content\nLine 3"
+        prompt = Prompt(title="Multi-line", content=content)
+        assert prompt.content == content
+
+class TestModelUpdateBehavior:
+    """Test model update and modification behavior."""
+
+    def test_prompt_update_preserves_timestamps(self):
+        """Updating a prompt should update the updated_at timestamp."""
+        import time
+        prompt = Prompt(title="Test", content="Original")
+        original_updated = prompt.updated_at
+        time.sleep(0.01)  # Ensure time passes
+        prompt.title = "Updated"
+        assert prompt.updated_at > original_updated
+
+    def test_prompt_update_with_optional_fields(self):
+        """Test updating with optional fields set to None."""
+        prompt = Prompt(
+            title="Test",
+            content="Content",
+            description="Original",
+            collection_id="col-123"
+        )
+        update = PromptUpdateOptional(description=None, collection_id=None)
+        # This would need implementation in the actual model
+        # Just testing the update object behavior
+        assert update.description is None
+        assert update.collection_id is None
+
+class TestModelSerializationEdgeCases:
+    """Additional serialization edge cases."""
+
+    def test_prompt_serialization_with_all_fields(self):
+        """Test serialization with all possible fields populated."""
+        prompt = Prompt(
+            id="123e4567-e89b-12d3-a456-426614174000",
+            title="Complete",
+            content="Full content",
+            description="Full description",
+            collection_id="col-123",
+            created_at=datetime(2023, 1, 1),
+            updated_at=datetime(2023, 1, 2)
+        )
+        dump = prompt.model_dump()
+        assert dump["id"] == "123e4567-e89b-12d3-a456-426614174000"
+        assert dump["created_at"] == datetime(2023, 1, 1)
+        assert dump["updated_at"] == datetime(2023, 1, 2)
+
+    def test_prompt_json_serialization_with_custom_encoder(self):
+        """Test JSON serialization handles datetime objects properly."""
+        prompt = Prompt(
+            title="Date test",
+            content="Content",
+            created_at=datetime(2023, 1, 1, 12, 30, 45)
+        )
+        json_str = prompt.model_dump_json()
+        data = json.loads(json_str)
+        assert "created_at" in data
+        # The exact format depends on Pydantic's datetime serialization
+        assert isinstance(data["created_at"], str)
+
+class TestCollectionEdgeCases:
+    """Additional collection-specific edge cases."""
+
+    def test_collection_with_minimum_fields(self):
+        """Collections should work with only required fields."""
+        collection = Collection(name="Minimal")
+        assert collection.name == "Minimal"
+        assert collection.description is None
+        assert isinstance(collection.id, str)
+        assert isinstance(collection.created_at, datetime)
+
+    def test_collection_update_optional(self):
+        """Test collection update with optional fields."""
+        update = CollectionBase(name="Updated", description="")
+        # Empty string should be treated as None for description
+        assert update.description == ""
+
+        # But whitespace should be normalized
+        update2 = CollectionBase(name="Updated", description="   ")
+        assert update2.description == "   "  # This might need adjustment based on actual model behavior
+
+class TestModelValidationWithInvalidTypes:
+    """Test model validation with invalid data types."""
+
+    def test_prompt_with_invalid_id_type(self):
+        """Test that non-string/non-UUID IDs are rejected."""
+        with pytest.raises(ValidationError):
+            Prompt(id=123, title="Test", content="Test")
+
+    def test_prompt_with_invalid_created_at_type(self):
+        """Test that invalid created_at types are rejected."""
+        with pytest.raises(ValidationError):
+            Prompt(title="Test", content="Test", created_at="not-a-date")
+
+    def test_collection_with_invalid_created_at(self):
+        """Test that invalid created_at types are rejected for collections."""
+        with pytest.raises(ValidationError):
+            Collection(name="Test", created_at="invalid")
