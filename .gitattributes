@@ -1,0 +1,8 @@
+# Set line endings for shell scripts
+*.sh text eol=lf
+
+# Set line endings for Python files
+*.py text eol=lf
+
+# Set line endings for all text files
+* text=auto eol=lf
