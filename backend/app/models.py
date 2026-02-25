@@ -193,10 +193,12 @@ class Prompt(PromptBase):
             # Sanitize HTML to prevent XSS attacks
             if value is not None:
                 value = sanitize_html(value)
-            super().__setattr__(name, value)
-            # Only update timestamp if this is not the initial creation
-            if hasattr(self, 'updated_at'):
+            # Only update timestamp if value actually changed and this is not initial creation
+            if hasattr(self, name) and getattr(self, name) != value and hasattr(self, 'updated_at'):
+                super().__setattr__(name, value)
                 super().__setattr__('updated_at', get_current_time())
+            else:
+                super().__setattr__(name, value)
         elif name == 'collection_id':
             super().__setattr__(name, value)
         else:
@@ -205,16 +207,43 @@ class Prompt(PromptBase):
     def __eq__(self, other):
         """Compare prompts by their data, not by object identity.
 
-        Two prompts are considered equal if they have the same content fields.
-        This allows for comparison of prompts regardless of their IDs or timestamps.
+        Two prompts are considered equal if they have the same content fields and ID.
+        This allows for comparison of prompts regardless of their timestamps.
         """
         if not isinstance(other, Prompt):
             return False
-        # Compare all content fields, ignoring timestamps, version, and ID
-        return (self.title == other.title and
+        # Compare all content fields and ID, ignoring timestamps and version
+        return (self.id == other.id and
+                self.title == other.title and
                 self.content == other.content and
                 self.description == other.description and
                 self.collection_id == other.collection_id)
+
+    def model_copy(self, *, update: Optional[dict] = None, deep: bool = False):
+        """Create a copy of the prompt with a new ID and new timestamps.
+
+        This ensures that copied prompts are independent instances that can be
+        modified without affecting the original.
+
+        Args:
+            update: Optional dictionary of field updates to apply to the copy.
+            deep: Whether to perform a deep copy of nested objects.
+
+        Returns:
+            A new Prompt instance with a new ID and current timestamps.
+        """
+        # Generate new ID and timestamps for the copy
+        copy_data = {
+            'id': generate_id(),
+            'created_at': get_current_time(),
+            'updated_at': get_current_time(),
+        }
+
+        # Apply any updates if provided
+        if update:
+            copy_data.update(update)
+
+        return super().model_copy(update=copy_data, deep=deep)
 
     class Config:
         from_attributes = True

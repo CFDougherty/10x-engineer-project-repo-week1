@@ -260,9 +260,9 @@ class TestModelComparison:
     """Test model equality and comparison behavior."""
 
     def test_prompt_equality(self):
-        """Prompts with same data should be equal."""
+        """Prompts with same data and same ID should be equal."""
         p1 = Prompt(title="Test", content="Content")
-        p2 = Prompt(title="Test", content="Content")
+        p2 = Prompt(id=p1.id, title="Test", content="Content")
         assert p1 == p2
 
     def test_prompt_inequality_with_different_data(self):
