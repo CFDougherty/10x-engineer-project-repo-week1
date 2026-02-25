@@ -241,6 +241,34 @@ class CollectionBase(BaseModel):
             raise ValueError("Name cannot be empty or whitespace only")
         return v
 
+class CollectionUpdateOptional(BaseModel):
+    """Schema for partially updating a collection with optional fields.
+
+    Attributes:
+        name (Optional[str]): Updated collection name.
+        description (Optional[str]): Updated collection description.
+    """
+
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+
+    @field_validator('*', mode='before')
+    def check_empty_values(cls, v, info):
+        """Normalize empty or whitespace-only strings to None.
+
+        Args:
+            cls: The model class.
+            v: The value being validated.
+            info: Validator context information provided by Pydantic.
+
+        Returns:
+            Any: None if the input is an empty or whitespace-only string; otherwise
+                the original value.
+        """
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
 class CollectionCreate(CollectionBase):
     """Schema for creating a collection.
 

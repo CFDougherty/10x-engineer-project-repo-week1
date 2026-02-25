@@ -36,7 +36,7 @@ from app.models import Prompt, PromptUpdateOptional
 
 from app.models import (
     Prompt, PromptCreate, PromptUpdate,
-    Collection, CollectionCreate,
+    Collection, CollectionCreate, CollectionUpdateOptional,
     PromptList, CollectionList, HealthResponse,
     get_current_time,
     PromptVersion, VersionList, VersionSummary
@@ -435,7 +435,7 @@ def update_collection(collection_id: str, collection_data: CollectionCreate):
     return result
 
 @app.patch("/collections/{collection_id}", response_model=Collection)
-def patch_collection(collection_id: str, collection_data: CollectionCreate):
+def patch_collection(collection_id: str, collection_data: CollectionUpdateOptional = Body(...)):
     """Partially updates an existing collection.
 
     This endpoint applies a partial update (PATCH semantics) to the collection
@@ -449,6 +449,7 @@ def patch_collection(collection_id: str, collection_data: CollectionCreate):
 
     Returns:
         The persisted, updated collection model after applying any requested changes.
+        If no fields are provided, the existing collection is returned unchanged.
 
     Raises:
         HTTPException: If the collection does not exist (404).
@@ -457,8 +458,9 @@ def patch_collection(collection_id: str, collection_data: CollectionCreate):
     if not existing:
         raise HTTPException(status_code=404, detail="Collection not found")
 
-    # Check if any fields were actually provided
-    if collection_data.name is None and collection_data.description is None:
+    # Check for actual changes using model_dump(exclude_unset=True)
+    updated_fields = collection_data.model_dump(exclude_unset=True)
+    if not updated_fields:
         return existing  # Return unchanged if no fields provided
 
     # Update only the fields that are provided
