@@ -394,7 +394,23 @@ def list_collections():
             - total: The total number of collections returned.
     """
     collections = storage.get_all_collections()
-    return CollectionList(collections=collections, total=len(collections))
+
+    # Update each collection with its prompt_ids
+    updated_collections = []
+    for collection in collections:
+        prompts = storage.get_prompts_by_collection_id(collection.id)
+        prompt_ids = [p.id for p in prompts]
+
+        updated_collection = Collection(
+            id=collection.id,
+            name=collection.name,
+            description=collection.description,
+            created_at=collection.created_at,
+            prompt_ids=prompt_ids
+        )
+        updated_collections.append(updated_collection)
+
+    return CollectionList(collections=updated_collections, total=len(updated_collections))
 
 
 @app.get("/collections/{collection_id}", response_model=Collection)
@@ -416,7 +432,19 @@ def get_collection(collection_id: str):
     collection = storage.get_collection(collection_id)
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
-    return collection
+
+    # Get all prompts in this collection
+    prompts = storage.get_prompts_by_collection_id(collection_id)
+    prompt_ids = [p.id for p in prompts]
+
+    # Return collection with updated prompt_ids
+    return Collection(
+        id=collection.id,
+        name=collection.name,
+        description=collection.description,
+        created_at=collection.created_at,
+        prompt_ids=prompt_ids
+    )
 
 
 @app.post("/collections", response_model=Collection, status_code=201)

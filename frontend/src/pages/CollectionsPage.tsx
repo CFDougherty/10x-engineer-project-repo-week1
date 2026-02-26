@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useCollections } from '../hooks/useCollections';
+import { usePrompts } from '../hooks/usePrompts';
 import {
   Button,
   Card,
@@ -13,18 +14,26 @@ import {
   DialogContent,
   DialogActions,
   Box,
-  IconButton
+  IconButton,
+  Chip
 } from '@mui/material';
 import { Grid } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 
 export default function CollectionsPage() {
   const { collections, loading, error, create, remove } = useCollections();
+  const { prompts: allPrompts } = usePrompts();
   const [open, setOpen] = useState(false);
+  const [viewingCollectionId, setViewingCollectionId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
   });
+
+  // Get prompts for the currently viewed collection
+  const collectionPrompts = viewingCollectionId
+    ? allPrompts.filter(prompt => prompt.collection_id === viewingCollectionId)
+    : [];
 
   const handleOpen = () => {
     setFormData({ name: '', description: '' });
@@ -88,7 +97,7 @@ export default function CollectionsPage() {
       ) : (
         <Grid container spacing={3}>
           {collections.map((collection) => (
-            // @ts-ignore
+            // @ts-expect-error - collection type has missing properties
             <Grid key={collection.id} item xs={12} sm={6} md={4}>
               <Card>
                 <CardContent>
@@ -107,7 +116,14 @@ export default function CollectionsPage() {
                     {collection.prompt_ids?.length || 0} prompts
                   </Typography>
                 </CardContent>
-                <Box sx={{ p: 2 }}>
+                <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between' }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => setViewingCollectionId(collection.id)}
+                  >
+                    View Prompts
+                  </Button>
                   <IconButton onClick={() => handleDelete(collection.id)} aria-label="delete">
                     <DeleteIcon />
                   </IconButton>
@@ -117,6 +133,56 @@ export default function CollectionsPage() {
           ))}
         </Grid>
       )}
+
+      {/* View Prompts in Collection */}
+      {viewingCollectionId && (
+        <Box mt={4}>
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+            <Typography variant="h5">
+              Prompts in {collections.find(c => c.id === viewingCollectionId)?.name}
+            </Typography>
+            <Button
+              variant="outlined"
+              onClick={() => setViewingCollectionId(null)}
+            >
+              Back to Collections
+            </Button>
+          </Box>
+
+          {collectionPrompts.length === 0 ? (
+            <Alert severity="info">No prompts in this collection. Create one!</Alert>
+          ) : (
+            <Grid container spacing={3}>
+              {collectionPrompts.map((prompt) => (
+                // @ts-expect-error - prompt type has missing properties
+                <Grid item xs={12} sm={6} md={4} key={prompt.id} sx={{ display: 'flex' }}>
+                  <Card>
+                    <CardContent>
+                      <Typography variant="h5" component="div">
+                        {prompt.title}
+                      </Typography>
+                      <Typography sx={{ mb: 1.5 }} color="text.secondary">
+                        Created: {new Date(prompt.created_at).toLocaleDateString()}
+                      </Typography>
+                      <Typography variant="body2" sx={{ mb: 2 }}>
+                        {prompt.content}
+                      </Typography>
+                      {prompt.tags && prompt.tags.length > 0 && (
+                        <Box sx={{ mb: 2 }}>
+                          {prompt.tags.map((tag: string) => (
+                            <Chip key={tag} label={tag} size="small" sx={{ mr: 1, mb: 1 }} />
+                          ))}
+                        </Box>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          )}
+        </Box>
+      )}
+
 
       {/* Create Collection Dialog */}
       <Dialog open={open} onClose={handleClose}>

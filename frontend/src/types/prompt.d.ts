@@ -6,6 +6,7 @@ export interface Prompt {
   created_at: string;
   updated_at: string;
   version?: string;
+  collection_id?: string;
 }
 
 export interface PromptCreate {
@@ -13,6 +14,7 @@ export interface PromptCreate {
   content: string;
   tags?: string[];
   version?: string;
+  collection_id?: string;
 }
 
 export interface PromptUpdate {
@@ -20,4 +22,5 @@ export interface PromptUpdate {
   content?: string;
   tags?: string[];
   version?: string;
+  collection_id?: string;
 }
