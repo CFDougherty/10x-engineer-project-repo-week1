@@ -113,7 +113,7 @@ export default function CollectionsPage() {
                     Created: {new Date(collection.created_at).toLocaleDateString()}
                   </Typography>
                   <Typography variant="body2">
-                    {collection.prompt_ids?.length || 0} prompts
+                    {allPrompts.filter(prompt => prompt.collection_id === collection.id).length} prompts
                   </Typography>
                 </CardContent>
                 <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between' }}>
