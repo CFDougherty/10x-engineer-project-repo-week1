@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { getCollections, createCollection, deleteCollection } from '../services/apiClient';
+import { useState } from 'react';
+import { useCollections } from '../hooks/useCollections';
 import {
   Button,
   Card,
@@ -19,28 +19,12 @@ import { Grid } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 
 export default function CollectionsPage() {
-  const [collections, setCollections] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { collections, loading, error, create, remove } = useCollections();
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
   });
-
-  const fetchCollections = async () => {
-    try {
-      setLoading(true);
-      const response = await getCollections();
-      setCollections(response.data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch collections');
-      console.error('Error fetching collections:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleOpen = () => {
     setFormData({ name: '', description: '' });
@@ -58,8 +42,7 @@ export default function CollectionsPage() {
         name: formData.name,
         description: formData.description,
       };
-      await createCollection(collectionData);
-      await fetchCollections();
+      await create(collectionData);
       handleClose();
     } catch (err) {
       console.error('Error creating collection:', err);
@@ -68,16 +51,11 @@ export default function CollectionsPage() {
 
   const handleDelete = async (id: string) => {
     try {
-      await deleteCollection(id);
-      await fetchCollections();
+      await remove(id);
     } catch (err) {
       console.error('Error deleting collection:', err);
     }
   };
-
-  useEffect(() => {
-    fetchCollections();
-  }, []);
 
   if (loading && collections.length === 0) {
     return (
