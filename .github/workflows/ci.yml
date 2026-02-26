@@ -3,10 +3,10 @@ name: CI
 on:
   push:
     branches:
-      - Week-3
+      - Week-4
   pull_request:
     branches:
-      - Week-3
+      - Week-4
 
 jobs:
   test:
