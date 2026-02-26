@@ -11,7 +11,7 @@ export const usePrompts = () => {
     try {
       setLoading(true);
       const response = await getPrompts();
-      setPrompts(response.data);
+      setPrompts(response.data.prompts);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch prompts');

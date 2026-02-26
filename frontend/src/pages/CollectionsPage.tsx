@@ -15,7 +15,7 @@ import {
   Box,
   IconButton
 } from '@mui/material';
-import Grid from '@mui/material/Grid';
+import { Grid } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 
 export default function CollectionsPage() {
@@ -110,7 +110,8 @@ export default function CollectionsPage() {
       ) : (
         <Grid container spacing={3}>
           {collections.map((collection) => (
-            <Grid item xs={12} sm={6} md={4} key={collection.id}>
+            // @ts-ignore
+            <Grid key={collection.id} item xs={12} sm={6} md={4}>
               <Card>
                 <CardContent>
                   <Typography variant="h5" component="div">

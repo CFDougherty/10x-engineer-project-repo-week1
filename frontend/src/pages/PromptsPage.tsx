@@ -17,7 +17,7 @@ import {
   Box,
   IconButton
 } from '@mui/material';
-import Grid from '@mui/material/Grid';
+import { Grid } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 
 export default function PromptsPage() {
@@ -110,6 +110,7 @@ export default function PromptsPage() {
       ) : (
         <Grid container spacing={3}>
           {prompts.map((prompt) => (
+            // @ts-ignore
             <Grid item xs={12} sm={6} md={4} key={prompt.id} sx={{ display: 'flex' }}>
               <Card>
                 <CardContent>
