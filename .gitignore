@@ -50,6 +50,9 @@ Thumbs.db
 # Log files
 *.log
 
+# Documentation
+frontend/IMPLEMENTATION_SUMMARY.md
+
 # Byte-compiled / optimized files
 __pycache__/
 *.py[cod]
