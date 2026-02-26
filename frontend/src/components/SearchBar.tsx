@@ -1,0 +1,42 @@
+import { TextField, InputAdornment } from '@mui/material';
+import { Search as SearchIcon } from '@mui/icons-material';
+
+interface SearchBarProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  size?: 'small' | 'medium';
+}
+
+export default function SearchBar({
+  value,
+  onChange,
+  placeholder = 'Search...',
+  size = 'small',
+}: SearchBarProps) {
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    onChange(event.target.value);
+  };
+
+  return (
+    <TextField
+      fullWidth
+      variant="outlined"
+      size={size}
+      value={value}
+      onChange={handleChange}
+      placeholder={placeholder}
+      InputProps={{
+        startAdornment: (
+          <InputAdornment position="start">
+            <SearchIcon />
+          </InputAdornment>
+        ),
+      }}
+      sx={{
+        backgroundColor: 'background.paper',
+        borderRadius: 1,
+      }}
+    />
+  );
+}

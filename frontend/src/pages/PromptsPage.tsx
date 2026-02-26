@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { usePrompts } from '../hooks/usePrompts';
 import { useCollections } from '../hooks/useCollections';
+import { useNavigate } from 'react-router-dom';
 import {
   Button,
   Card,
@@ -22,6 +23,7 @@ import {
 import { Grid } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import PromptCreationDialog from '../components/PromptCreationDialog';
+import SearchBar from '../components/SearchBar';
 
 export default function PromptsPage() {
   const { prompts, loading, error, update, remove } = usePrompts();
@@ -34,7 +36,9 @@ export default function PromptsPage() {
     tags: '',
     collectionId: '',
   });
+  const [searchQuery, setSearchQuery] = useState('');
   const { collections, refetch } = useCollections();
+  const navigate = useNavigate();
 
   const handleOpen = () => {
     setCreateDialogOpen(true);
@@ -97,12 +101,20 @@ export default function PromptsPage() {
   return (
     <div>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
-        <Typography variant="h4">Prompts</Typography>
+        <Box sx={{ flexGrow: 1 }}>
+          <Typography variant="h4" gutterBottom>Prompts</Typography>
+          <SearchBar
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Search prompts..."
+          />
+        </Box>
         <Button
           variant="contained"
           color="primary"
           startIcon={<AddIcon />}
           onClick={handleOpen}
+          sx={{ ml: 2 }}
         >
           New Prompt
         </Button>
@@ -178,7 +190,7 @@ export default function PromptsPage() {
           {prompts.map((prompt) => (
             // @ts-expect-error - prompt type has missing properties
             <Grid item xs={12} sm={6} md={4} key={prompt.id} sx={{ display: 'flex' }}>
-              <Card>
+              <Card onClick={() => navigate(`/prompts/${prompt.id}`)} sx={{ cursor: 'pointer', '&:hover': { boxShadow: 3 } }}>
                 <CardContent>
                   <Typography variant="h5" component="div">
                     {prompt.title}
@@ -198,10 +210,10 @@ export default function PromptsPage() {
                   )}
                 </CardContent>
                 <CardActions>
-                  <IconButton onClick={() => handleEdit(prompt)} aria-label="edit">
+                  <IconButton onClick={(e) => { e.stopPropagation(); handleEdit(prompt); }} aria-label="edit">
                     <EditIcon />
                   </IconButton>
-                  <IconButton onClick={() => handleDelete(prompt.id)} aria-label="delete">
+                  <IconButton onClick={(e) => { e.stopPropagation(); handleDelete(prompt.id); }} aria-label="delete">
                     <DeleteIcon />
                   </IconButton>
                 </CardActions>
