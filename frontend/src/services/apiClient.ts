@@ -13,8 +13,13 @@ const apiClient = axios.create({
 export const getPrompts = (params?: {
   page?: number;
   limit?: number;
-  collection?: string;
+  collectionId?: string;
   search?: string;
+  searchField?: string;
+  searchTitle?: string;
+  searchDescription?: string;
+  searchTags?: string;
+  searchCollection?: string;
   sort?: string;
 }) => apiClient.get('/prompts', { params });
 

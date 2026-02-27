@@ -37,6 +37,7 @@ export default function PromptsPage() {
     collectionId: '',
   });
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchField, setSearchField] = useState('all');
   const [selectedCollection, setSelectedCollection] = useState('');
   const [showCollectionDialog, setShowCollectionDialog] = useState(false);
   const { collections } = useCollections();
@@ -45,7 +46,9 @@ export default function PromptsPage() {
   useEffect(() => {
     const params: any = {};
     if (searchQuery) {
+      // Use unified search with searchField parameter
       params.search = searchQuery;
+      params.searchField = searchField;
     }
     if (selectedCollection) {
       params.collectionId = selectedCollection;
@@ -55,7 +58,7 @@ export default function PromptsPage() {
     } else {
       refetch();
     }
-  }, [searchQuery, selectedCollection, refetch]);
+  }, [searchQuery, searchField, selectedCollection, refetch]);
 
   const handleOpen = () => {
     setCreateDialogOpen(true);
@@ -126,6 +129,8 @@ export default function PromptsPage() {
             <SearchBar
               value={searchQuery}
               onChange={setSearchQuery}
+              searchField={searchField}
+              onSearchFieldChange={setSearchField}
               placeholder="Search prompts..."
               sx={{ flexGrow: 1 }}
             />

@@ -1,4 +1,4 @@
-import { TextField, InputAdornment } from '@mui/material';
+import { TextField, InputAdornment, Select, MenuItem, FormControl } from '@mui/material';
 import type { TextFieldProps } from '@mui/material';
 import { Search as SearchIcon } from '@mui/icons-material';
 import { useRef, useEffect } from 'react';
@@ -8,6 +8,8 @@ interface SearchBarProps extends Omit<TextFieldProps, 'onChange' | 'value'> {
   onChange: (value: string) => void;
   placeholder?: string;
   size?: 'small' | 'medium';
+  searchField?: string;
+  onSearchFieldChange?: (field: string) => void;
 }
 
 export default function SearchBar({
@@ -15,9 +17,17 @@ export default function SearchBar({
   onChange,
   placeholder = 'Search...',
   size = 'small',
+  searchField = 'all',
+  onSearchFieldChange,
 }: SearchBarProps) {
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     onChange(event.target.value);
+  };
+
+  const handleSearchFieldChange = (event: any) => {
+    if (onSearchFieldChange) {
+      onSearchFieldChange(event.target.value);
+    }
   };
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -30,25 +40,60 @@ export default function SearchBar({
   }, [value]);
 
   return (
-    <TextField
-      fullWidth
-      variant="outlined"
-      size={size}
-      value={value}
-      onChange={handleChange}
-      placeholder={placeholder}
-      inputRef={inputRef}
-      InputProps={{
-        startAdornment: (
-          <InputAdornment position="start">
-            <SearchIcon />
-          </InputAdornment>
-        ),
-      }}
-      sx={{
-        backgroundColor: 'background.paper',
-        borderRadius: 1,
-      }}
-    />
+    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <TextField
+        fullWidth
+        variant="outlined"
+        size={size}
+        value={value}
+        onChange={handleChange}
+        placeholder={placeholder}
+        inputRef={inputRef}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon />
+            </InputAdornment>
+          ),
+        }}
+        sx={{
+          backgroundColor: 'background.paper',
+          borderRadius: 1,
+        }}
+      />
+      {onSearchFieldChange && (
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <Select
+            value={searchField}
+            onChange={handleSearchFieldChange}
+            displayEmpty
+            sx={{
+              backgroundColor: 'background.paper',
+              borderRadius: 1,
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': {
+                  borderColor: 'rgba(0, 0, 0, 0.23)',
+                },
+              },
+            }}
+            MenuProps={{
+              PaperProps: {
+                sx: {
+                  bgcolor: 'background.paper',
+                  '& .MuiMenuItem-root': {
+                    color: 'text.primary'
+                  }
+                }
+              }
+            }}
+          >
+            <MenuItem value="all">All</MenuItem>
+            <MenuItem value="description">Description</MenuItem>
+            <MenuItem value="tags">Tags</MenuItem>
+            <MenuItem value="collection">Collection</MenuItem>
+          </Select>
+        </FormControl>
+      )}
+    </div>
   );
 }

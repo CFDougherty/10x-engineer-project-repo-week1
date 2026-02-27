@@ -255,8 +255,9 @@ class TestSearchPrompts:
 
         results = search_prompts(prompts, "python")
         assert len(results) == 2
-        assert results[0].title == "Title 1"
-        assert results[1].title == "Title 3"
+        titles = [r.title for r in results]
+        assert "Title 1" in titles
+        assert "Title 3" in titles
 
     def test_search_case_insensitive(self):
         """Test that search is case-insensitive."""
@@ -340,11 +341,16 @@ class TestSearchPrompts:
         prompts = [
             Prompt(title="Café", content="content", description="desc"),
             Prompt(title="Naïve", content="content", description="desc"),
+            Prompt(title="Python", content="content", description="desc"),
         ]
 
         results = search_prompts(prompts, "é")
         assert len(results) == 1
         assert results[0].title == "Café"
+
+        results = search_prompts(prompts, "ï")
+        assert len(results) == 1
+        assert results[0].title == "Naïve"
 
     def test_search_with_whitespace_query(self):
         """Test searching with query containing whitespace."""

@@ -1,6 +1,6 @@
 """Utility functions for PromptLab."""
 
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from app.models import Prompt
 from fuzzysearch import find_near_matches
 
@@ -39,7 +39,7 @@ def filter_prompts_by_collection(prompts: List[Prompt], collection_id: str) -> L
     """
     return [p for p in prompts if p.collection_id == collection_id]
 
-def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True) -> List[Prompt]:
+def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True, search_field: Optional[str] = None) -> List[Prompt]:
     """Search prompts by title, content, description, and tags.
 
     Uses fuzzysearch for real-time search with good performance.
@@ -48,6 +48,8 @@ def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True) -> Lis
         prompts: List of Prompt instances to search.
         query: Search text to look for within each prompt's fields.
         fuzzy: If True, uses fuzzy matching. If False, uses exact substring matching.
+        search_field: Optional field to search in ('all', 'title', 'description', 'tags', 'collection').
+            If None (default), searches all fields.
 
     Returns:
         A list of Prompt instances that match the query, sorted by match quality
@@ -58,35 +60,75 @@ def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True) -> Lis
 
     query_lower = query.lower().strip()
 
+    # Determine which fields to search based on search_field parameter
+    fields_to_search = []
+
+    if search_field == 'title':
+        fields_to_search = ['title']
+    elif search_field == 'content':
+        fields_to_search = ['content']
+    elif search_field == 'description':
+        fields_to_search = ['description']
+    elif search_field == 'tags':
+        fields_to_search = ['tags']
+    elif search_field == 'collection':
+        fields_to_search = ['collection']
+    else:  # 'all' or None - search all fields
+        fields_to_search = ['title', 'content', 'description', 'tags']
+
     if not fuzzy:
         # Exact substring matching
-        return [
-            p for p in prompts
-            if query_lower in p.title.lower() or
-               query_lower in p.content.lower() or
-               (p.description and query_lower in p.description.lower()) or
-               (p.tags and any(query_lower in tag.lower() for tag in p.tags))
-        ]
+        results = []
+        for p in prompts:
+            match = False
+            if 'title' in fields_to_search and query_lower in p.title.lower():
+                match = True
+            if not match and 'content' in fields_to_search and query_lower in p.content.lower():
+                match = True
+            if not match and 'description' in fields_to_search and p.description and query_lower in p.description.lower():
+                match = True
+            if not match and 'tags' in fields_to_search and p.tags and any(query_lower in tag.lower() for tag in p.tags):
+                match = True
+            if not match and 'collection' in fields_to_search and p.collection_id:
+                # Get all collections to check collection name
+                from app.storage import storage
+                all_collections = storage.get_all_collections()
+                if any(c.id == p.collection_id and query_lower in c.name.lower() for c in all_collections):
+                    match = True
+            if match:
+                results.append(p)
+        return results
 
     # Fuzzy search using fuzzysearch
     # For each prompt, check all searchable fields
     matches = []
 
     for p in prompts:
-        # Check each field individually for better matching
-        fields_to_check = [
-            p.title.lower(),
-            p.content.lower(),
-        ]
-        if p.description:
-            fields_to_check.append(p.description.lower())
-        if p.tags:
-            fields_to_check.append(" ".join(p.tags).lower())
+        fields_to_check = []
+
+        if 'title' in fields_to_search:
+            fields_to_check.append(('title', p.title.lower()))
+        if 'content' in fields_to_search:
+            fields_to_check.append(('content', p.content.lower()))
+        if 'description' in fields_to_search and p.description:
+            fields_to_check.append(('description', p.description.lower()))
+        if 'tags' in fields_to_search and p.tags:
+            fields_to_check.append(('tags', " ".join(p.tags).lower()))
+        if 'collection' in fields_to_search and p.collection_id:
+            # Get all collections to check collection name
+            from app.storage import storage
+            all_collections = storage.get_all_collections()
+            collection_names = [c.name.lower() for c in all_collections if c.id == p.collection_id]
+            if collection_names:
+                fields_to_check.append(('collection', collection_names[0]))
 
         # Find matches in each field
-        for field in fields_to_check:
+        for field_name, field in fields_to_check:
             # Use a more strict distance threshold
-            max_dist = max(1, len(query_lower) // 2)  # At most half the query length
+            # For single-character queries, use max_dist=0 for exact match
+            # For longer queries, use max_dist=half the query length
+            query_len = len(query_lower)
+            max_dist = 0 if query_len == 1 else max(1, query_len // 2)
             near_matches = find_near_matches(
                 query_lower,
                 field,
@@ -95,18 +137,26 @@ def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True) -> Lis
 
             if near_matches:
                 # Only consider matches with reasonable distance
-                # Distance should be less than or equal to 2 for good matches
-                good_matches = [m for m in near_matches if m.dist <= 2]
+                # For single-character queries, distance should be 0 (exact match)
+                # For longer queries, distance should be small relative to query length
+                if query_len == 1:
+                    # For single character, require exact match (distance 0)
+                    good_matches = [m for m in near_matches if m.dist == 0]
+                else:
+                    # For longer queries, allow small distance
+                    max_allowed_dist = min(2, query_len // 2)
+                    good_matches = [m for m in near_matches if m.dist <= max_allowed_dist]
+
                 if good_matches:
                     best_match = min(good_matches, key=lambda m: m.start)
                     # Better scoring: prioritize earlier matches and shorter distance
                     # Title matches get a bonus to appear first
-                    field_weight = 2.0 if field == p.title.lower() else 1.0
+                    field_weight = 2.0 if field_name == 'title' else 1.0
                     score = 100 * field_weight - (best_match.start * 2) - (best_match.dist * 5)
                     # Ensure score doesn't go below 0
                     score = max(0, score)
                     matches.append((score, p))
-                    break  # Only use the best field match for this prompt
+                    break  # Stop after finding first match in the specified field
 
     # Sort by score (descending) to get best matches first
     matches.sort(reverse=True, key=lambda x: x[0])
