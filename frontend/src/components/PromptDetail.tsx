@@ -15,7 +15,7 @@ import {
   TextField,
   MenuItem,
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import ConfirmationDialog from './ConfirmationDialog';
 import { useCollections } from '../hooks/useCollections';
 
@@ -122,34 +122,14 @@ export default function PromptDetail() {
           Back to Prompts
         </Button>
         <Box>
-          {!editMode ? (
-            <Box display="flex" gap={2}>
-              <Button
-                startIcon={<EditIcon />}
-                variant="outlined"
-                onClick={() => setEditMode(true)}
-              >
-                Edit
-              </Button>
-              <Button
-                startIcon={<DeleteIcon />}
-                color="error"
-                variant="outlined"
-                onClick={() => setDeleteDialogOpen(true)}
-              >
-                Delete
-              </Button>
-            </Box>
-          ) : (
-            <Box display="flex" gap={2}>
-              <Button onClick={() => setEditMode(false)} color="inherit">
-                Cancel
-              </Button>
-              <Button type="submit" form="edit-prompt-form" variant="contained">
-                Save
-              </Button>
-            </Box>
-          )}
+          <Button
+            startIcon={<DeleteIcon />}
+            color="error"
+            variant="outlined"
+            onClick={() => setDeleteDialogOpen(true)}
+          >
+            Delete
+          </Button>
         </Box>
       </Box>
 
@@ -169,6 +149,13 @@ export default function PromptDetail() {
                 </Typography>
               )}
             </Box>
+            {prompt.collection_id && (
+              <Box sx={{ mb: 2 }}>
+                <Typography color="text.secondary" variant="body2">
+                  Collection: {collections.find(c => c.id === prompt.collection_id)?.name || 'Unknown'}
+                </Typography>
+              </Box>
+            )}
             {prompt.tags && prompt.tags.length > 0 && (
               <Box sx={{ mb: 3 }}>
                 {prompt.tags.map((tag) => (
