@@ -24,36 +24,37 @@ export const usePrompts = () => {
   const createNewPrompt = useCallback(async (promptData: PromptCreate) => {
     try {
       const response = await createPrompt(promptData);
-      setPrompts(prev => [...prev, response.data]);
+      // Refetch all prompts to ensure consistency with collections
+      await fetchPrompts();
       return response.data;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create prompt');
       throw err;
     }
-  }, []);
+  }, [fetchPrompts]);
 
   const updateExistingPrompt = useCallback(async (id: string, promptData: PromptUpdate) => {
     try {
       const response = await updatePrompt(id, promptData);
-      setPrompts(prev => prev.map(prompt =>
-        prompt.id === id ? response.data : prompt
-      ));
+      // Refetch all prompts to ensure consistency with collections
+      await fetchPrompts();
       return response.data;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update prompt');
       throw err;
     }
-  }, []);
+  }, [fetchPrompts]);
 
   const removePrompt = useCallback(async (id: string) => {
     try {
       await deletePrompt(id);
-      setPrompts(prev => prev.filter(prompt => prompt.id !== id));
+      // Refetch all prompts to ensure consistency with collections
+      await fetchPrompts();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete prompt');
       throw err;
     }
-  }, []);
+  }, [fetchPrompts]);
 
   useEffect(() => {
     fetchPrompts();

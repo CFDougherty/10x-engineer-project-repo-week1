@@ -17,7 +17,6 @@ interface PromptCreationDialogProps {
   onClose: () => void;
   initialCollectionId?: string;
   onPromptCreated?: () => void;
-  refetchCollections?: () => void;
 }
 
 export default function PromptCreationDialog({
@@ -25,7 +24,6 @@ export default function PromptCreationDialog({
   onClose,
   initialCollectionId,
   onPromptCreated,
-  refetchCollections,
 }: PromptCreationDialogProps) {
   const { create: createPrompt } = usePrompts();
   const { collections, create: createCollection } = useCollections();
@@ -66,10 +64,6 @@ export default function PromptCreationDialog({
       await createPrompt(promptData);
       if (onPromptCreated) {
         onPromptCreated();
-      }
-      // Refetch collections to update prompt_ids
-      if (refetchCollections) {
-        refetchCollections();
       }
       handleClose();
     } catch (err) {

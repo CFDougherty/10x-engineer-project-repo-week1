@@ -26,7 +26,7 @@ import PromptCreationDialog from '../components/PromptCreationDialog';
 import SearchBar from '../components/SearchBar';
 
 export default function PromptsPage() {
-  const { prompts, loading, error, update, remove } = usePrompts();
+  const { prompts, loading, error, update, remove, refetch } = usePrompts();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<any>(null);
@@ -37,7 +37,7 @@ export default function PromptsPage() {
     collectionId: '',
   });
   const [searchQuery, setSearchQuery] = useState('');
-  const { collections, refetch } = useCollections();
+  const { collections } = useCollections();
   const navigate = useNavigate();
 
   const handleOpen = () => {
@@ -70,8 +70,6 @@ export default function PromptsPage() {
         collection_id: editFormData.collectionId || undefined,
       };
       await update(editingPrompt.id, promptData);
-      // Refetch collections to update prompt_ids if collection changed
-      await refetch();
       handleCloseEdit();
     } catch (err) {
       console.error('Error saving prompt:', err);
@@ -124,7 +122,7 @@ export default function PromptsPage() {
       <PromptCreationDialog
         open={createDialogOpen}
         onClose={() => setCreateDialogOpen(false)}
-        refetchCollections={refetch}
+        onPromptCreated={refetch}
       />
 
       {/* Edit Prompt Dialog */}
