@@ -134,6 +134,15 @@ export default function PromptsPage() {
                 value={selectedCollection}
                 label="Filter by Collection"
                 onChange={(e) => setSelectedCollection(e.target.value)}
+                sx={{
+                  backgroundColor: 'background.paper',
+                  borderRadius: 1,
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': {
+                      borderColor: 'rgba(0, 0, 0, 0.23)',
+                    },
+                  },
+                }}
                 MenuProps={{
                   PaperProps: {
                     sx: {
