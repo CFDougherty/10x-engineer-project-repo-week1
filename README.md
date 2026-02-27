@@ -23,6 +23,51 @@ PromptLab acts like a “Postman for prompts”: a shared workspace to create pr
 
 - Python 3.10+
 - Git
+- Node.js 18+
+- npm
+
+### Quick Start with Docker (Recommended)
+
+```bash
+docker-compose up --build
+```
+
+This will:
+- Start the backend API on port 8000
+- Start the frontend on port 3000
+- Access the application at: http://localhost:3000
+
+### Run Locally Without Docker
+
+#### 1. Backend Setup
+
+```bash
+# Install dependencies
+cd backend
+pip install -r requirements.txt
+
+# Start the backend
+cd backend
+uvicorn app.api:app --reload --host 0.0.0.0 --port 8000
+```
+
+Backend will be available at:
+- API: http://localhost:8000
+- Swagger docs: http://localhost:8000/docs
+
+#### 2. Frontend Setup
+
+```bash
+# Install dependencies
+cd frontend
+npm install
+
+# Start the frontend
+cd frontend
+npm run dev
+```
+
+Frontend will be available at: http://localhost:5173
 
 ### Run in GitHub Codespaces
 
@@ -41,29 +86,6 @@ cd backend
 python main.py
 # or: uvicorn app.api:app --reload --host 0.0.0.0 --port 8000
 ```
-
-### Run locally
-
-```bash
-# Clone the repo
-git clone <your-repo-url>
-cd promptlab
-
-# (Recommended) create & activate a virtual environment
-python -m venv .venv
-source .venv/bin/activate
-
-# Install backend dependencies
-cd backend
-python -m pip install -r requirements.txt
-
-# Start the API server
-# NOTE: run from the backend/ directory so the `app` module can be imported.
-uvicorn app.api:app --reload --host 0.0.0.0 --port 8000
-```
-
-- API base URL: `http://localhost:8000`
-- Interactive Swagger docs: `http://localhost:8000/docs`
 
 **GitHub Codespaces note:** if you open the Swagger UI in your browser, use the forwarded URL shown in the Codespaces **Ports** tab (port `8000`) and append `/docs` (e.g. `https://<your-codespace>-8000.app.github.dev/docs`). From the Codespaces terminal, `http://localhost:8000` works.
 
@@ -447,6 +469,42 @@ echo
 echo "GET $BASE_URL/collections/$COLLECTION_ID (expect 404 {\"detail\":\"Collection not found\"})"
 # Confirm the collection is gone
 curl -sS -i "$BASE_URL/collections/$COLLECTION_ID"
+```
+
+---
+
+## Troubleshooting
+
+### If the page doesn't load after the fix:
+
+1. Make sure both backend and frontend are running
+2. Check that the backend is accessible at http://localhost:8000/health
+3. Clear your browser cache and refresh
+4. Check the browser console for any errors
+
+### Common Issues:
+
+- **ThemeProvider Error**: Fixed by adding ThemeProvider to main.tsx
+- **Backend not running**: Start the backend first before the frontend
+- **Port conflicts**: Change the port in the commands if 8000 or 5173 are in use
+
+---
+
+## API Testing
+
+You can test the API directly using Swagger UI at http://localhost:8000/docs or with curl commands:
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Create a collection
+curl -X POST http://localhost:8000/collections \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Test Collection","description":"Test"}'
+
+# List collections
+curl http://localhost:8000/collections
 ```
 
 ---
