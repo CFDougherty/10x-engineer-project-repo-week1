@@ -31,6 +31,7 @@ export default function PromptDetail() {
   const [editData, setEditData] = useState({
     title: '',
     content: '',
+    description: '',
     tags: '',
     collectionId: '',
   });
@@ -49,6 +50,7 @@ export default function PromptDetail() {
         setEditData({
           title: response.data.title,
           content: response.data.content,
+          description: response.data.description || '',
           tags: response.data.tags?.join(', ') || '',
           collectionId: response.data.collection_id || '',
         });
@@ -73,6 +75,7 @@ export default function PromptDetail() {
       const promptData = {
         title: editData.title,
         content: editData.content,
+        description: editData.description || undefined,
         tags: tagsArray,
         collection_id: editData.collectionId || undefined,
       };
@@ -166,6 +169,11 @@ export default function PromptDetail() {
                 ))}
               </Box>
             )}
+            {prompt.description && (
+              <Typography variant="body2" paragraph sx={{ mb: 2 }}>
+                <strong>Description:</strong> {prompt.description}
+              </Typography>
+            )}
             <Typography variant="body1" paragraph>
               {prompt.content}
             </Typography>
@@ -204,6 +212,15 @@ export default function PromptDetail() {
                 value={editData.content}
                 onChange={(e) => setEditData({...editData, content: e.target.value})}
                 required
+              />
+              <TextField
+                fullWidth
+                margin="normal"
+                label="Description"
+                multiline
+                rows={4}
+                value={editData.description}
+                onChange={(e) => setEditData({...editData, description: e.target.value})}
               />
               <TextField
                 fullWidth

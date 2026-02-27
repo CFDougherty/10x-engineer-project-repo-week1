@@ -30,6 +30,7 @@ export default function PromptCreationDialog({
   const [formData, setFormData] = useState({
     title: '',
     content: '',
+    description: '',
     tags: '',
     collectionId: initialCollectionId || '',
   });
@@ -41,6 +42,7 @@ export default function PromptCreationDialog({
     setFormData({
       title: '',
       content: '',
+      description: '',
       tags: '',
       collectionId: initialCollectionId || '',
     });
@@ -57,6 +59,7 @@ export default function PromptCreationDialog({
       const promptData = {
         title: formData.title,
         content: formData.content,
+        description: formData.description || undefined,
         tags: tagsArray,
         collection_id: formData.collectionId || undefined,
       };
@@ -118,6 +121,15 @@ export default function PromptCreationDialog({
               value={formData.content}
               onChange={(e) => setFormData({...formData, content: e.target.value})}
               required
+            />
+            <TextField
+              margin="dense"
+              label="Description"
+              fullWidth
+              multiline
+              rows={2}
+              value={formData.description}
+              onChange={(e) => setFormData({...formData, description: e.target.value})}
             />
             <TextField
               margin="dense"
