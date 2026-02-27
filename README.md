@@ -164,6 +164,44 @@ Storage is **in-memory** (`backend/app/storage.py`). Restarting the server clear
 
 ---
 
+## Test Data Generation
+
+Populate your server with realistic test data for testing and evaluation:
+
+```bash
+cd backend
+python populate_test_data.py
+```
+
+### Options
+
+```bash
+# Create 40 prompts and 4 collections (default)
+python populate_test_data.py
+
+# Create custom amount of data
+python populate_test_data.py --prompts 50 --collections 5
+
+# Clear existing data first
+python populate_test_data.py --clear
+
+# Test without sending to API (dry run)
+python populate_test_data.py --dry-run
+
+# Connect to remote server
+python populate_test_data.py --base-url http://your-server:8000
+```
+
+The script automatically:
+- Generates 40+ prompts with natural language content
+- Creates 3-5 collections with descriptive names
+- Randomly assigns prompts to collections (60% distribution)
+- Adds 3-5 relevant tags per prompt
+- Adds descriptive text for all items
+- Uses the Faker library for realistic, readable content
+
+---
+
 ## Usage Examples
 
 Examples below use `curl` and assume the server is running at `http://localhost:8000`.
