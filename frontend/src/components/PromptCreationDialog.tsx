@@ -70,9 +70,9 @@ export default function PromptCreationDialog({
     }
   };
 
-  const handleCollectionCreated = () => {
-    // After collection is created, it will be automatically available in the collections list
-    // due to the refetch in CollectionCreationDialog
+  const handleCollectionCreated = (collectionId: string) => {
+    // After collection is created, set it as the selected collection in the dropdown
+    setFormData({...formData, collectionId});
   };
 
   return (

@@ -250,6 +250,9 @@ export default function PromptsPage() {
       <CollectionCreationDialog
         open={showCollectionDialog}
         onClose={() => setShowCollectionDialog(false)}
+        onCollectionCreated={(collectionId) => {
+          setEditFormData({...editFormData, collectionId});
+        }}
       />
 
       {prompts.length === 0 ? (

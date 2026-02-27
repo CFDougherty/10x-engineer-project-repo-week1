@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCollections } from '../contexts/CollectionsContext';
 import { usePrompts } from '../hooks/usePrompts';
 import {
@@ -14,21 +15,25 @@ import {
   DialogContent,
   DialogActions,
   Box,
-  IconButton,
-  Chip
+  IconButton
 } from '@mui/material';
 import { Grid } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import ConfirmationDialog from '../components/ConfirmationDialog';
+import PromptCard from '../components/PromptCard';
 
 export default function CollectionsPage() {
+  const navigate = useNavigate();
   const { collections, loading, error, create, remove } = useCollections();
-  const { prompts: allPrompts, refetch: refetchPrompts } = usePrompts();
+  const { prompts: allPrompts, refetch: refetchPrompts, remove: removePrompt } = usePrompts();
   const [open, setOpen] = useState(false);
   const [viewingCollectionId, setViewingCollectionId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
   });
+  const [promptToDelete, setPromptToDelete] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   // Get prompts for the currently viewed collection
   const collectionPrompts = viewingCollectionId
@@ -69,6 +74,26 @@ export default function CollectionsPage() {
       await refetchPrompts();
     } catch (err) {
       console.error('Error deleting collection:', err);
+    }
+  };
+
+  const handlePromptEdit = (promptId: string) => {
+    navigate(`/prompts/${promptId}`);
+  };
+
+  const handlePromptDelete = (promptId: string) => {
+    setPromptToDelete(promptId);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeletePrompt = async () => {
+    if (!promptToDelete) return;
+    try {
+      await removePrompt(promptToDelete);
+      setDeleteDialogOpen(false);
+      setPromptToDelete(null);
+    } catch (err) {
+      console.error('Error deleting prompt:', err);
     }
   };
 
@@ -115,9 +140,12 @@ export default function CollectionsPage() {
                       {collection.description}
                     </Typography>
                   )}
-                  <Typography sx={{ mb: 1.5 }} color="text.secondary">
-                    Created: {new Date(collection.created_at).toLocaleDateString()}
-                  </Typography>
+                  <Box sx={{ mb: 1.5, display: 'flex', flexDirection: 'column' }}>
+                    <Typography variant="caption" color="text.secondary">Created</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {new Date(collection.created_at).toLocaleDateString()}
+                    </Typography>
+                  </Box>
                   <Typography variant="body2">
                     {allPrompts.filter(prompt => prompt.collection_id === collection.id).length} prompts
                   </Typography>
@@ -161,27 +189,12 @@ export default function CollectionsPage() {
             <Grid container spacing={3}>
               {collectionPrompts.map((prompt) => (
                 // @ts-expect-error - prompt type has missing properties
-                <Grid item xs={12} sm={6} md={4} key={prompt.id} sx={{ display: 'flex' }}>
-                  <Card>
-                    <CardContent>
-                      <Typography variant="h5" component="div">
-                        {prompt.title}
-                      </Typography>
-                      <Typography sx={{ mb: 1.5 }} color="text.secondary">
-                        Created: {new Date(prompt.created_at).toLocaleDateString()}
-                      </Typography>
-                      <Typography variant="body2" sx={{ mb: 2 }}>
-                        {prompt.content}
-                      </Typography>
-                      {prompt.tags && prompt.tags.length > 0 && (
-                        <Box sx={{ mb: 2 }}>
-                          {prompt.tags.map((tag: string) => (
-                            <Chip key={tag} label={tag} size="small" sx={{ mr: 1, mb: 1 }} />
-                          ))}
-                        </Box>
-                      )}
-                    </CardContent>
-                  </Card>
+                <Grid item xs={12} sm={6} md={4} key={prompt.id}>
+                  <PromptCard
+                    prompt={prompt}
+                    onEdit={handlePromptEdit}
+                    onDelete={handlePromptDelete}
+                  />
                 </Grid>
               ))}
             </Grid>
@@ -222,6 +235,15 @@ export default function CollectionsPage() {
           </DialogActions>
         </form>
       </Dialog>
+
+      <ConfirmationDialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={confirmDeletePrompt}
+        title="Delete Prompt"
+        message="Are you sure you want to delete this prompt? This action cannot be undone."
+        confirmText="Delete"
+      />
     </div>
   );
 }

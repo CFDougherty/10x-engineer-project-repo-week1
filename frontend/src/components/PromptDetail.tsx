@@ -147,14 +147,20 @@ export default function PromptDetail() {
             <Typography variant="h3" component="h1" gutterBottom>
               {prompt.title}
             </Typography>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-              <Typography color="text.secondary">
-                Created: {formatDateTime(prompt.created_at)}
-              </Typography>
-              {prompt.updated_at && prompt.updated_at !== prompt.created_at && (
-                <Typography color="text.secondary">
-                  Updated: {formatDateTime(prompt.updated_at)}
+            <Box display="flex" justifyContent="space-between" alignItems="start" mb={2}>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Created</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {formatDateTime(prompt.created_at)}
                 </Typography>
+              </Box>
+              {prompt.updated_at && prompt.updated_at !== prompt.created_at && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Updated</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {formatDateTime(prompt.updated_at)}
+                  </Typography>
+                </Box>
               )}
             </Box>
             {prompt.collection_id && (
@@ -283,6 +289,9 @@ export default function PromptDetail() {
       <CollectionCreationDialog
         open={showCollectionDialog}
         onClose={() => setShowCollectionDialog(false)}
+        onCollectionCreated={(collectionId) => {
+          setEditData({...editData, collectionId});
+        }}
       />
     </div>
   );

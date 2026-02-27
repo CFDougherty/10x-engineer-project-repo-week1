@@ -13,7 +13,7 @@ import { useCollections } from '../contexts/CollectionsContext';
 interface CollectionCreationDialogProps {
   open: boolean;
   onClose: () => void;
-  onCollectionCreated?: () => void;
+  onCollectionCreated?: (collectionId: string) => void;
 }
 
 export default function CollectionCreationDialog({
@@ -40,11 +40,11 @@ export default function CollectionCreationDialog({
         name: newCollectionName.trim(),
         description: '',
       };
-      await createCollection(collectionData);
+      const newCollection = await createCollection(collectionData);
       // Refresh collections to ensure all components get the updated list
       await refetch();
       if (onCollectionCreated) {
-        onCollectionCreated();
+        onCollectionCreated(newCollection.id);
       }
       handleClose();
     } catch (err) {
