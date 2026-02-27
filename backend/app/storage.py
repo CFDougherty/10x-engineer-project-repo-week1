@@ -112,6 +112,7 @@ class Storage:
             content=prompt.content,
             description=prompt.description,
             collection_id=prompt.collection_id,
+            tags=prompt.tags,
             created_at=original_prompt.created_at,
             updated_at=prompt.updated_at,
             version=prompt.version
@@ -330,7 +331,8 @@ class Storage:
             title=prompt.title,
             content=prompt.content,
             description=prompt.description,
-            collection_id=prompt.collection_id
+            collection_id=prompt.collection_id,
+            tags=prompt.tags
         )
 
         # Initialize versions list if needed
@@ -417,7 +419,8 @@ class Storage:
             title=old_version.title,
             content=old_version.content,
             description=old_version.description,
-            collection_id=old_version.collection_id
+            collection_id=old_version.collection_id,
+            tags=old_version.tags
         )
 
         # Create the new version

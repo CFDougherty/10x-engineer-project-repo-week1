@@ -24,13 +24,14 @@ export const useCollections = () => {
   const createNewCollection = useCallback(async (collectionData: CollectionCreate) => {
     try {
       const response = await createCollection(collectionData);
-      setCollections(prev => [...prev, response.data]);
+      // Refetch collections to ensure consistency
+      await fetchCollections();
       return response.data;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create collection');
       throw err;
     }
-  }, []);
+  }, [fetchCollections]);
 
   const updateExistingCollection = useCallback(async (id: string, collectionData: CollectionUpdate) => {
     try {

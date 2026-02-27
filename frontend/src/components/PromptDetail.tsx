@@ -13,9 +13,11 @@ import {
   CircularProgress,
   Alert,
   TextField,
+  MenuItem,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import ConfirmationDialog from './ConfirmationDialog';
+import { useCollections } from '../hooks/useCollections';
 
 export default function PromptDetail() {
   const { id } = useParams<{ id: string }>();
@@ -28,8 +30,10 @@ export default function PromptDetail() {
     title: '',
     content: '',
     tags: '',
+    collectionId: '',
   });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { collections } = useCollections();
 
   useEffect(() => {
     if (!id) return;
@@ -43,6 +47,7 @@ export default function PromptDetail() {
           title: response.data.title,
           content: response.data.content,
           tags: response.data.tags?.join(', ') || '',
+          collectionId: response.data.collection_id || '',
         });
         setError(null);
       } catch (err) {
@@ -66,6 +71,7 @@ export default function PromptDetail() {
         title: editData.title,
         content: editData.content,
         tags: tagsArray,
+        collection_id: editData.collectionId || undefined,
       };
 
       const response = await updatePrompt(id, promptData);
@@ -209,6 +215,21 @@ export default function PromptDetail() {
                 value={editData.tags}
                 onChange={(e) => setEditData({...editData, tags: e.target.value})}
               />
+              <TextField
+                select
+                fullWidth
+                margin="normal"
+                label="Collection"
+                value={editData.collectionId}
+                onChange={(e) => setEditData({...editData, collectionId: e.target.value})}
+              >
+                <MenuItem value="">None (no collection)</MenuItem>
+                {collections.map((collection) => (
+                  <MenuItem key={collection.id} value={collection.id}>
+                    {collection.name}
+                  </MenuItem>
+                ))}
+              </TextField>
             </CardContent>
             <CardActions>
               <Button type="button" onClick={() => setEditMode(false)}>

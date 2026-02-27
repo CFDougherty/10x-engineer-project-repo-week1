@@ -280,6 +280,7 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
         content=prompt_data.content,
         description=prompt_data.description,
         collection_id=prompt_data.collection_id,
+        tags=prompt_data.tags,
         created_at=existing.created_at,
         updated_at=get_current_time()
     )
@@ -334,7 +335,7 @@ def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(...)):
     # Check if any of the provided fields actually differ from existing values
     has_changes = False
     for field in updated_fields:
-        if field in ['title', 'content', 'description', 'collection_id']:
+        if field in ['title', 'content', 'description', 'collection_id', 'tags']:
             if getattr(existing, field) != updated_fields[field]:
                 has_changes = True
                 break

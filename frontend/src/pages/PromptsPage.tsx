@@ -134,6 +134,16 @@ export default function PromptsPage() {
                 value={selectedCollection}
                 label="Filter by Collection"
                 onChange={(e) => setSelectedCollection(e.target.value)}
+                MenuProps={{
+                  PaperProps: {
+                    sx: {
+                      bgcolor: 'background.paper',
+                      '& .MuiMenuItem-root': {
+                        color: 'text.primary'
+                      }
+                    }
+                  }
+                }}
               >
                 <MenuItem value="">All Collections</MenuItem>
                 {collections.map((collection) => (

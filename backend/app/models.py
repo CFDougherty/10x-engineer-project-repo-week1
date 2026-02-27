@@ -82,12 +82,14 @@ class PromptBase(BaseModel):
         content (str): Prompt content (minimum 1 character).
         description (Optional[str]): Optional prompt description (up to 500 characters).
         collection_id (Optional[str]): Optional identifier for the collection the prompt belongs to.
+        tags (Optional[List[str]]): Optional list of tags associated with the prompt.
     """
 
     title: str = Field(..., max_length=200)
     content: str = Field(...)
     description: Optional[str] = Field(None, max_length=500)
     collection_id: Optional[str] = Field(None, min_length=0)  # Allow empty string or None
+    tags: Optional[List[str]] = Field(None)
 
     model_config = ConfigDict(
         str_strip_whitespace=True
@@ -129,6 +131,15 @@ class PromptBase(BaseModel):
         """Ensure title is not empty."""
         if not v or not v.strip():
             raise ValueError("title must be a non-empty string")
+        return v
+
+    @field_validator('tags', mode='after')
+    def validate_tags(cls, v):
+        """Ensure tags are valid strings."""
+        if v is not None:
+            for tag in v:
+                if not isinstance(tag, str) or not tag.strip():
+                    raise ValueError("Tags must be non-empty strings")
         return v
 
 
@@ -366,6 +377,7 @@ class PromptVersion(BaseModel):
         content: The prompt content at this version.
         description: The prompt description at this version (optional).
         collection_id: The collection identifier at this version (optional).
+        tags: The tags at this version (optional).
         created_at: Timestamp when this version was created.
     """
 
@@ -375,6 +387,7 @@ class PromptVersion(BaseModel):
     content: str = Field(..., min_length=1)
     description: Optional[str] = Field(None, max_length=500)
     collection_id: Optional[str] = None
+    tags: Optional[List[str]] = None
     created_at: datetime = Field(default_factory=get_current_time)
 
     class Config:
