@@ -129,8 +129,8 @@ export default function CollectionsPage() {
         <Grid container spacing={3}>
           {collections.map((collection) => (
             // @ts-expect-error - collection type has missing properties
-            <Grid key={collection.id} item xs={12} sm={6} md={4}>
-              <Card>
+            <Grid key={collection.id} item xs={12} sm={6} md={4} sx={{ display: 'flex' }}>
+              <Card sx={{ cursor: 'pointer', '&:hover': { boxShadow: 3 }, width: 350, overflow: 'hidden' }}>
                 <CardContent>
                   <Typography variant="h5" component="div">
                     {collection.name}
