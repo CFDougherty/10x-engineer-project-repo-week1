@@ -32,6 +32,17 @@ export interface VersionSummary {
   description?: string;
 }
 
+export interface PromptVersion {
+  prompt_id: string;
+  version: number;
+  title: string;
+  content: string;
+  description?: string;
+  collection_id?: string;
+  tags?: string[];
+  created_at: string;
+}
+
 export interface VersionList {
   prompt_id: string;
   versions: VersionSummary[];

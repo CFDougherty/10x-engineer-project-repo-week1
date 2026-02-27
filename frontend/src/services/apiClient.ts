@@ -34,6 +34,12 @@ export const deletePrompt = (id: string) => apiClient.delete(`/prompts/${id}`);
 export const getPromptVersions = (promptId: string) =>
   apiClient.get(`/prompts/${promptId}/versions`);
 
+export const getPromptVersion = (promptId: string, version: number) =>
+  apiClient.get(`/prompts/${promptId}/versions/${version}`);
+
+export const promotePromptVersion = (promptId: string, version: number) =>
+  apiClient.post(`/prompts/${promptId}/versions/${version}/promote`);
+
 // Collection API endpoints
 export const getCollections = () => apiClient.get('/collections');
 

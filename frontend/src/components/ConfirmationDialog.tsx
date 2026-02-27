@@ -1,4 +1,4 @@
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, CircularProgress, Alert } from '@mui/material';
 
 interface ConfirmationDialogProps {
   open: boolean;
@@ -8,6 +8,8 @@ interface ConfirmationDialogProps {
   message: string;
   confirmText?: string;
   cancelText?: string;
+  loading?: boolean;
+  error?: string | null;
 }
 
 export default function ConfirmationDialog({
@@ -18,10 +20,11 @@ export default function ConfirmationDialog({
   message,
   confirmText = 'Confirm',
   cancelText = 'Cancel',
+  loading = false,
+  error = null,
 }: ConfirmationDialogProps) {
   const handleConfirm = () => {
     onConfirm();
-    onClose();
   };
 
   return (
@@ -29,13 +32,24 @@ export default function ConfirmationDialog({
       <DialogTitle>{title}</DialogTitle>
       <DialogContent>
         {message}
+        {error && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {error}
+          </Alert>
+        )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} color="inherit">
+        <Button onClick={onClose} color="inherit" disabled={loading}>
           {cancelText}
         </Button>
-        <Button onClick={handleConfirm} color="error" variant="contained">
-          {confirmText}
+        <Button
+          onClick={handleConfirm}
+          color="error"
+          variant="contained"
+          disabled={loading}
+          startIcon={loading ? <CircularProgress size={20} /> : null}
+        >
+          {loading ? 'Processing...' : confirmText}
         </Button>
       </DialogActions>
     </Dialog>
