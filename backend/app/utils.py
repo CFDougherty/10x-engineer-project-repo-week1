@@ -1,8 +1,8 @@
 """Utility functions for PromptLab."""
 
-from typing import List
+from typing import List, Tuple
 from app.models import Prompt
-
+from rapidfuzz import fuzz, process
 
 def sort_prompts_by_date(prompts: List[Prompt], descending: bool = True) -> List[Prompt]:
     """Sorts a list of prompts by their creation timestamp.
@@ -20,7 +20,6 @@ def sort_prompts_by_date(prompts: List[Prompt], descending: bool = True) -> List
         A new list of `Prompt` instances sorted by ``created_at``.
     """
     return sorted(prompts, key=lambda p: p.created_at, reverse=descending)
-
 
 def filter_prompts_by_collection(prompts: List[Prompt], collection_id: str) -> List[Prompt]:
     """Filters a list of prompts to those that belong to a specific collection.
@@ -40,37 +39,65 @@ def filter_prompts_by_collection(prompts: List[Prompt], collection_id: str) -> L
     """
     return [p for p in prompts if p.collection_id == collection_id]
 
-
-def search_prompts(prompts: List[Prompt], query: str) -> List[Prompt]:
-    """Search prompts by a case-insensitive substring match on title/description/content.
+def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True) -> List[Prompt]:
+    """Search prompts by title, content, description, and tags.
 
     This helper scans the provided `prompts` and returns only those where `query`
-    is contained in either `Prompt.title`, `Prompt.content`, or (if present) `Prompt.description`.
-    Matching is case-insensitive and the relative order of matching prompts is
-    preserved.
-
-    Notes:
-        - `Prompt.description` is optional (see `app.models.PromptBase`); prompts
-          with `description=None` are still eligible to match by title or content.
-        - An empty `query` will match all prompts because the empty string is a
-          substring of any string.
+    matches against the prompt's title, content, description, or tags.
 
     Args:
         prompts: List of `Prompt` instances to search.
-        query: Search text to look for within each prompt's title, content, and optional
-            description.
-    Returns:
-        A list of `Prompt` instances whose title, content, or description contains `query`
-        (case-insensitive), in the same order as the input list.
-    """
-    query_lower = query.lower()
-    return [
-        p for p in prompts 
-        if query_lower in p.title.lower() or 
-           query_lower in p.content.lower() or 
-           (p.description and query_lower in p.description.lower())
-    ]
+        query: Search text to look for within each prompt's fields.
+        fuzzy: If True (default), uses fuzzy string matching. If False, uses exact substring matching.
 
+    Returns:
+        A list of `Prompt` instances that match the query, sorted by relevance score
+        (if fuzzy search is enabled) or in the original order (if exact matching).
+    """
+    if not query or not query.strip():
+        return prompts
+
+    query_lower = query.lower().strip()
+
+    if not fuzzy:
+        # Exact substring matching (original behavior)
+        return [
+            p for p in prompts
+            if query_lower in p.title.lower() or
+               query_lower in p.content.lower() or
+               (p.description and query_lower in p.description.lower()) or
+               (p.tags and any(query_lower in tag.lower() for tag in p.tags))
+        ]
+
+    # Fuzzy search using rapidfuzz
+    # Combine all searchable fields into a single string for each prompt
+    searchable_prompts = []
+    for p in prompts:
+        # Build a composite search string from all fields
+        fields = [
+            p.title,
+            p.content,
+            p.description or "",
+            " ".join(p.tags) if p.tags else ""
+        ]
+        search_string = " ".join(fields).lower()
+        searchable_prompts.append(search_string)
+
+    # Use rapidfuzz to find best matches with scores
+    # Score cutoff of 60 means we only include reasonable matches
+    results = process.extract(query_lower, searchable_prompts, scorer=fuzz.WRatio, score_cutoff=60)
+
+    # Create a dictionary mapping search strings to prompts for lookup
+    search_string_to_prompt = {search_string: p for search_string, p in zip(searchable_prompts, prompts)}
+
+    # Extract prompts in order of best match
+    matched_prompts = []
+    for match in results:
+        search_string = match[0]
+        if search_string in search_string_to_prompt:
+            matched_prompts.append(search_string_to_prompt[search_string])
+
+    return matched_prompts
 
 def validate_prompt_content(content: str) -> bool:
     """Validates that a prompt's content is non-empty and meets a minimum length.
@@ -94,7 +121,6 @@ def validate_prompt_content(content: str) -> bool:
     if not content or not content.strip():
         return False
     return len(content.strip()) >= 10
-
 
 def extract_variables(content: str) -> List[str]:
     """Extracts template variable names from prompt content.

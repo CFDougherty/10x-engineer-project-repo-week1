@@ -27,7 +27,7 @@ export const usePrompts = () => {
   const createNewPrompt = useCallback(async (promptData: PromptCreate) => {
     try {
       const response = await createPrompt(promptData);
-      // Refetch all prompts to ensure consistency with collections
+      // Wait for refetch to complete to ensure data consistency
       await fetchPrompts();
       return response.data;
     } catch (err) {
@@ -39,7 +39,7 @@ export const usePrompts = () => {
   const updateExistingPrompt = useCallback(async (id: string, promptData: PromptUpdate) => {
     try {
       const response = await updatePrompt(id, promptData);
-      // Refetch all prompts to ensure consistency with collections
+      // Wait for refetch to complete to ensure data consistency
       await fetchPrompts();
       return response.data;
     } catch (err) {
@@ -51,7 +51,7 @@ export const usePrompts = () => {
   const removePrompt = useCallback(async (id: string) => {
     try {
       await deletePrompt(id);
-      // Refetch all prompts to ensure consistency with collections
+      // Wait for refetch to complete to ensure data consistency
       await fetchPrompts();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete prompt');

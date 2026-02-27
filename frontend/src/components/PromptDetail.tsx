@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getPromptById, updatePrompt, deletePrompt } from '../services/apiClient';
 import type { Prompt } from '../types/prompt';
+import axios from 'axios';
 import {
   Card,
   CardContent,
@@ -58,8 +59,16 @@ export default function PromptDetail() {
         });
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch prompt');
+        // Handle 404 specifically
+        if (axios.isAxiosError(err) && err.response && err.response.status === 404) {
+          setError('Prompt not found');
+        } else if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError('Failed to fetch prompt');
+        }
         console.error('Error fetching prompt:', err);
+        setPrompt(null); // Ensure prompt is null on error
       } finally {
         setLoading(false);
       }

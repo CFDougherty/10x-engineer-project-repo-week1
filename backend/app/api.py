@@ -124,6 +124,7 @@ def list_prompts(
     collection_id: Optional[str] = None,
     search: Optional[str] = None,
     title: Optional[str] = None,
+    fuzzy: bool = True,
     limit: Optional[int] = None,
     offset: Optional[int] = None
 ):
@@ -140,6 +141,7 @@ def list_prompts(
             prompts matching the query are returned.
         title: Optional title to filter by. If provided, only prompts with
             matching title are returned.
+        fuzzy: If True (default), uses fuzzy string matching for search. If False, uses exact substring matching.
         limit: Optional maximum number of prompts to return.
         offset: Optional offset for pagination.
 
@@ -159,7 +161,7 @@ def list_prompts(
 
     # Search if query provided
     if search:
-        all_prompts = search_prompts(all_prompts, search)
+        all_prompts = search_prompts(all_prompts, search, fuzzy=fuzzy)
 
     # Sort by date (newest first)
     all_prompts = sort_prompts_by_date(all_prompts, descending=True)
