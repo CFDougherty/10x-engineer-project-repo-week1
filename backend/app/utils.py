@@ -77,15 +77,31 @@ def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True) -> Lis
         fields = [
             p.title,
             p.content,
-            p.description or "",
-            " ".join(p.tags) if p.tags else ""
         ]
+        # Only add description if it's not None
+        if p.description is not None:
+            fields.append(p.description)
+        # Only add tags if they exist
+        if p.tags:
+            fields.append(" ".join(p.tags))
         search_string = " ".join(fields).lower()
         searchable_prompts.append(search_string)
 
     # Use rapidfuzz to find best matches with scores
-    # Score cutoff of 60 means we only include reasonable matches
-    results = process.extract(query_lower, searchable_prompts, scorer=fuzz.WRatio, score_cutoff=60)
+    # For very short queries (1-2 chars), use a lower cutoff to allow character matching
+    # For short single-word queries (3-20 chars), use a higher cutoff to avoid false positives
+    # For longer queries, use a lower cutoff to allow for more flexibility
+    if len(query_lower) <= 2:
+        # Very short query (1-2 characters) - allow character matching
+        score_cutoff = 55
+    elif len(query_lower.split()) == 1 and len(query_lower) < 20:
+        # Single word query (3-20 chars) - be more strict
+        score_cutoff = 65
+    else:
+        # Multi-word or longer query - be more lenient
+        score_cutoff = 60
+
+    results = process.extract(query_lower, searchable_prompts, scorer=fuzz.WRatio, score_cutoff=score_cutoff)
 
     # Create a dictionary mapping search strings to prompts for lookup
     search_string_to_prompt = {search_string: p for search_string, p in zip(searchable_prompts, prompts)}
