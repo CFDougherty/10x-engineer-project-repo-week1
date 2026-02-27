@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { usePrompts } from '../hooks/usePrompts';
-import { useCollections } from '../hooks/useCollections';
+import { useCollections } from '../contexts/CollectionsContext';
 import { useNavigate } from 'react-router-dom';
 import {
   Card,
@@ -25,6 +25,7 @@ import {
 import { Grid } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import PromptCreationDialog from '../components/PromptCreationDialog';
+import CollectionCreationDialog from '../components/CollectionCreationDialog';
 import SearchBar from '../components/SearchBar';
 import Button from '../components/Button';
 import { formatDateTime } from '../utils/dateUtils';
@@ -42,6 +43,7 @@ export default function PromptsPage() {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCollection, setSelectedCollection] = useState('');
+  const [showCollectionDialog, setShowCollectionDialog] = useState(false);
   const { collections } = useCollections();
   const navigate = useNavigate();
 
@@ -228,6 +230,12 @@ export default function PromptsPage() {
                   {collection.name}
                 </MenuItem>
               ))}
+              <MenuItem value="__create_new__" onClick={(e) => {
+                e.stopPropagation();
+                setShowCollectionDialog(true);
+              }}>
+                + Create new collection...
+              </MenuItem>
             </TextField>
           </DialogContent>
           <DialogActions>
@@ -238,6 +246,11 @@ export default function PromptsPage() {
           </DialogActions>
         </form>
       </Dialog>
+
+      <CollectionCreationDialog
+        open={showCollectionDialog}
+        onClose={() => setShowCollectionDialog(false)}
+      />
 
       {prompts.length === 0 ? (
         <Alert severity="info">No prompts found. Create your first prompt!</Alert>

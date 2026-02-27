@@ -6,11 +6,11 @@ import {
   DialogActions,
   TextField,
   Button,
-  MenuItem,
-  CircularProgress
+  MenuItem
 } from '@mui/material';
-import { useCollections } from '../hooks/useCollections';
+import { useCollections } from '../contexts/CollectionsContext';
 import { usePrompts } from '../hooks/usePrompts';
+import CollectionCreationDialog from './CollectionCreationDialog';
 
 interface PromptCreationDialogProps {
   open: boolean;
@@ -26,7 +26,7 @@ export default function PromptCreationDialog({
   onPromptCreated,
 }: PromptCreationDialogProps) {
   const { create: createPrompt } = usePrompts();
-  const { collections, create: createCollection } = useCollections();
+  const { collections } = useCollections();
   const [formData, setFormData] = useState({
     title: '',
     content: '',
@@ -34,8 +34,6 @@ export default function PromptCreationDialog({
     tags: '',
     collectionId: initialCollectionId || '',
   });
-  const [isCreatingCollection, setIsCreatingCollection] = useState(false);
-  const [newCollectionName, setNewCollectionName] = useState('');
   const [showCollectionDialog, setShowCollectionDialog] = useState(false);
 
   const handleClose = () => {
@@ -46,8 +44,6 @@ export default function PromptCreationDialog({
       tags: '',
       collectionId: initialCollectionId || '',
     });
-    setNewCollectionName('');
-    setIsCreatingCollection(false);
     setShowCollectionDialog(false);
     onClose();
   };
@@ -74,26 +70,9 @@ export default function PromptCreationDialog({
     }
   };
 
-  const handleCreateNewCollection = async () => {
-    if (!newCollectionName.trim()) return;
-
-    setIsCreatingCollection(true);
-    try {
-      const collectionData = {
-        name: newCollectionName.trim(),
-        description: '',
-      };
-      const newCollection = await createCollection(collectionData);
-      setFormData({
-        ...formData,
-        collectionId: newCollection.id,
-      });
-      setShowCollectionDialog(false);
-    } catch (err) {
-      console.error('Error creating collection:', err);
-    } finally {
-      setIsCreatingCollection(false);
-    }
+  const handleCollectionCreated = () => {
+    // After collection is created, it will be automatically available in the collections list
+    // due to the refetch in CollectionCreationDialog
   };
 
   return (
@@ -170,35 +149,11 @@ export default function PromptCreationDialog({
       </Dialog>
 
       {/* Create New Collection Dialog */}
-      <Dialog open={showCollectionDialog} onClose={() => setShowCollectionDialog(false)}>
-        <form onSubmit={(e) => {
-          e.preventDefault();
-          handleCreateNewCollection();
-        }}>
-          <DialogTitle>Create New Collection</DialogTitle>
-          <DialogContent>
-            <TextField
-              autoFocus
-              margin="dense"
-              label="Collection Name"
-              fullWidth
-              value={newCollectionName}
-              onChange={(e) => setNewCollectionName(e.target.value)}
-              required
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setShowCollectionDialog(false)}>Cancel</Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={isCreatingCollection || !newCollectionName.trim()}
-            >
-              {isCreatingCollection ? <CircularProgress size={24} /> : 'Create'}
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
+      <CollectionCreationDialog
+        open={showCollectionDialog}
+        onClose={() => setShowCollectionDialog(false)}
+        onCollectionCreated={handleCollectionCreated}
+      />
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useCollections } from '../hooks/useCollections';
+import { useCollections } from '../contexts/CollectionsContext';
 import { usePrompts } from '../hooks/usePrompts';
 import {
   Button,

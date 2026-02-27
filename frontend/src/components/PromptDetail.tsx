@@ -18,7 +18,8 @@ import {
 import { Delete as DeleteIcon, ArrowBack as ArrowBackIcon, History as HistoryIcon } from '@mui/icons-material';
 import ConfirmationDialog from './ConfirmationDialog';
 import VersionHistoryDialog from './VersionHistoryDialog';
-import { useCollections } from '../hooks/useCollections';
+import CollectionCreationDialog from './CollectionCreationDialog';
+import { useCollections } from '../contexts/CollectionsContext';
 import { formatDateTime } from '../utils/dateUtils';
 
 export default function PromptDetail() {
@@ -37,6 +38,7 @@ export default function PromptDetail() {
   });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+  const [showCollectionDialog, setShowCollectionDialog] = useState(false);
   const { collections } = useCollections();
 
   useEffect(() => {
@@ -243,6 +245,12 @@ export default function PromptDetail() {
                     {collection.name}
                   </MenuItem>
                 ))}
+                <MenuItem value="__create_new__" onClick={(e) => {
+                  e.stopPropagation();
+                  setShowCollectionDialog(true);
+                }}>
+                  + Create new collection...
+                </MenuItem>
               </TextField>
             </CardContent>
             <CardActions>
@@ -270,6 +278,11 @@ export default function PromptDetail() {
         open={versionHistoryOpen}
         onClose={() => setVersionHistoryOpen(false)}
         promptId={prompt?.id || ''}
+      />
+
+      <CollectionCreationDialog
+        open={showCollectionDialog}
+        onClose={() => setShowCollectionDialog(false)}
       />
     </div>
   );

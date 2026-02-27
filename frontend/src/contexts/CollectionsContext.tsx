@@ -1,8 +1,20 @@
-import { useState, useEffect, useCallback } from 'react';
-import { getCollections, createCollection, updateCollection, deleteCollection } from '../services/apiClient';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { getCollections, createCollection as apiCreateCollection, updateCollection as apiUpdateCollection, deleteCollection as apiDeleteCollection } from '../services/apiClient';
 import type { Collection, CollectionCreate, CollectionUpdate } from '../types/collection';
 
-export const useCollections = () => {
+interface CollectionsContextType {
+  collections: Collection[];
+  loading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+  create: (collectionData: CollectionCreate) => Promise<Collection>;
+  update: (id: string, collectionData: CollectionUpdate) => Promise<Collection>;
+  remove: (id: string) => Promise<void>;
+}
+
+const CollectionsContext = createContext<CollectionsContextType | undefined>(undefined);
+
+export const CollectionsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,9 +33,9 @@ export const useCollections = () => {
     }
   }, []);
 
-  const createNewCollection = useCallback(async (collectionData: CollectionCreate) => {
+  const createCollection = useCallback(async (collectionData: CollectionCreate) => {
     try {
-      const response = await createCollection(collectionData);
+      const response = await apiCreateCollection(collectionData);
       // Refetch collections to ensure consistency
       await fetchCollections();
       return response.data;
@@ -35,7 +47,7 @@ export const useCollections = () => {
 
   const updateExistingCollection = useCallback(async (id: string, collectionData: CollectionUpdate) => {
     try {
-      const response = await updateCollection(id, collectionData);
+      const response = await apiUpdateCollection(id, collectionData);
       setCollections(prev => prev.map(collection =>
         collection.id === id ? response.data : collection
       ));
@@ -48,7 +60,7 @@ export const useCollections = () => {
 
   const removeCollection = useCallback(async (id: string) => {
     try {
-      await deleteCollection(id);
+      await apiDeleteCollection(id);
       setCollections(prev => prev.filter(collection => collection.id !== id));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete collection');
@@ -60,13 +72,27 @@ export const useCollections = () => {
     fetchCollections();
   }, [fetchCollections]);
 
-  return {
-    collections,
-    loading,
-    error,
-    refetch: fetchCollections,
-    create: createNewCollection,
-    update: updateExistingCollection,
-    remove: removeCollection,
-  };
+  return (
+    <CollectionsContext.Provider
+      value={{
+        collections,
+        loading,
+        error,
+        refetch: fetchCollections,
+        create: createCollection,
+        update: updateExistingCollection,
+        remove: removeCollection,
+      }}
+    >
+      {children}
+    </CollectionsContext.Provider>
+  );
+};
+
+export const useCollections = () => {
+  const context = useContext(CollectionsContext);
+  if (context === undefined) {
+    throw new Error('useCollections must be used within a CollectionsProvider');
+  }
+  return context;
 };
