@@ -22,7 +22,7 @@ import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 
 export default function CollectionsPage() {
   const { collections, loading, error, create, remove } = useCollections();
-  const { prompts: allPrompts } = usePrompts();
+  const { prompts: allPrompts, refetch: refetchPrompts } = usePrompts();
   const [open, setOpen] = useState(false);
   const [viewingCollectionId, setViewingCollectionId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -61,6 +61,12 @@ export default function CollectionsPage() {
   const handleDelete = async (id: string) => {
     try {
       await remove(id);
+      // Reset the viewing state if the deleted collection was being viewed
+      if (viewingCollectionId === id) {
+        setViewingCollectionId(null);
+      }
+      // Refetch prompts to ensure they're in sync with collections
+      await refetchPrompts();
     } catch (err) {
       console.error('Error deleting collection:', err);
     }
