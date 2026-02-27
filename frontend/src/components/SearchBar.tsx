@@ -1,7 +1,8 @@
 import { TextField, InputAdornment } from '@mui/material';
+import type { TextFieldProps } from '@mui/material';
 import { Search as SearchIcon } from '@mui/icons-material';
 
-interface SearchBarProps {
+interface SearchBarProps extends Omit<TextFieldProps, 'onChange' | 'value'> {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;

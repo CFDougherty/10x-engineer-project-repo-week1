@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePrompts } from '../hooks/usePrompts';
 import { useCollections } from '../hooks/useCollections';
 import { useNavigate } from 'react-router-dom';
 import {
-  Button,
   Card,
   CardContent,
   CardActions,
@@ -18,12 +17,16 @@ import {
   Chip,
   Box,
   IconButton,
-  MenuItem
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Select
 } from '@mui/material';
 import { Grid } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import PromptCreationDialog from '../components/PromptCreationDialog';
 import SearchBar from '../components/SearchBar';
+import Button from '../components/Button';
 
 export default function PromptsPage() {
   const { prompts, loading, error, update, remove, refetch } = usePrompts();
@@ -37,8 +40,25 @@ export default function PromptsPage() {
     collectionId: '',
   });
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCollection, setSelectedCollection] = useState('');
   const { collections } = useCollections();
   const navigate = useNavigate();
+
+  // Apply search and filter
+  useEffect(() => {
+    const params: any = {};
+    if (searchQuery) {
+      params.search = searchQuery;
+    }
+    if (selectedCollection) {
+      params.collectionId = selectedCollection;
+    }
+    if (Object.keys(params).length > 0) {
+      refetch(params);
+    } else {
+      refetch();
+    }
+  }, [searchQuery, selectedCollection, refetch]);
 
   const handleOpen = () => {
     setCreateDialogOpen(true);
@@ -101,11 +121,29 @@ export default function PromptsPage() {
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
         <Box sx={{ flexGrow: 1 }}>
           <Typography variant="h4" gutterBottom>Prompts</Typography>
-          <SearchBar
-            value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder="Search prompts..."
-          />
+          <Box display="flex" alignItems="center" gap={2} mb={2}>
+            <SearchBar
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search prompts..."
+              sx={{ flexGrow: 1 }}
+            />
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel>Filter by Collection</InputLabel>
+              <Select
+                value={selectedCollection}
+                label="Filter by Collection"
+                onChange={(e) => setSelectedCollection(e.target.value)}
+              >
+                <MenuItem value="">All Collections</MenuItem>
+                {collections.map((collection) => (
+                  <MenuItem key={collection.id} value={collection.id}>
+                    {collection.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
         </Box>
         <Button
           variant="contained"

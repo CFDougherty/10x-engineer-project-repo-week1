@@ -7,10 +7,13 @@ export const usePrompts = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPrompts = useCallback(async () => {
+  const fetchPrompts = useCallback(async (params?: {
+    collectionId?: string;
+    search?: string;
+  }) => {
     try {
       setLoading(true);
-      const response = await getPrompts();
+      const response = await getPrompts(params);
       setPrompts(response.data.prompts);
       setError(null);
     } catch (err) {
