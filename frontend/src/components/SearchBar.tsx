@@ -88,6 +88,8 @@ export default function SearchBar({
             }}
           >
             <MenuItem value="all">All</MenuItem>
+            <MenuItem value="title">Title</MenuItem>
+            <MenuItem value="content">Content</MenuItem>
             <MenuItem value="description">Description</MenuItem>
             <MenuItem value="tags">Tags</MenuItem>
             <MenuItem value="collection">Collection</MenuItem>

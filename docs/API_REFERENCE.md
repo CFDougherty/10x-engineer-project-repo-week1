@@ -349,7 +349,8 @@ List prompts.
 | Name | Type | Required | Description |
 |---|---|---:|---|
 | `collection_id` | string | no | Filter prompts by exact `collection_id` |
-| `search` | string | no | Case-insensitive substring match against `title` and `description` |
+| `search` | string | no | Case-insensitive substring match against prompt fields |
+| `filter` | string | no | Filter search to specific field. One of: `'title'`, `'description'`, `'tags'`, `'collection'`, or `'all'`. Default: `'all'` (search all fields) |
 
 **curl**
 

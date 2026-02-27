@@ -123,13 +123,7 @@ def health_check():
 def list_prompts(
     collection_id: Optional[str] = None,
     search: Optional[str] = None,
-    search_field: Optional[str] = None,
-    searchField: Optional[str] = None,  # Accept camelCase for frontend compatibility
-    search_title: Optional[str] = None,
-    search_description: Optional[str] = None,
-    search_tags: Optional[str] = None,
-    search_collection: Optional[str] = None,
-    title: Optional[str] = None,
+    filter: Optional[str] = None,  # 'title', 'description', 'tags', 'collection', or 'all'
     fuzzy: bool = True,
     limit: Optional[int] = None,
     offset: Optional[int] = None
@@ -145,14 +139,8 @@ def list_prompts(
             provided, only prompts belonging to this collection are returned.
         search: Optional search term used to filter prompts. If provided, only
             prompts matching the query are returned.
-        search_field: Optional field to search in ('all', 'title', 'description', 'tags', 'collection').
-            If provided with search, limits search to the specified field.
-        search_title: Optional search term for title field only.
-        search_description: Optional search term for description field only.
-        search_tags: Optional search term for tags field only.
-        search_collection: Optional search term for collection name field only.
-        title: Optional title to filter by. If provided, only prompts with
-            matching title are returned.
+        filter: Optional field to filter search by. One of: 'title', 'description',
+            'tags', 'collection', or 'all'. Default: 'all' (search all fields).
         fuzzy: If True (default), uses fuzzy string matching for search. If False, uses exact substring matching.
         limit: Optional maximum number of prompts to return.
         offset: Optional offset for pagination.
@@ -163,64 +151,34 @@ def list_prompts(
     """
     all_prompts = storage.get_all_prompts()
 
-    # Filter by title if specified
-    if title:
-        all_prompts = [p for p in all_prompts if p.title == title]
-
     # Filter by collection if specified
     if collection_id:
         all_prompts = filter_prompts_by_collection(all_prompts, collection_id)
 
-    # Search logic - prioritize field-specific searches when searchField is provided
-    # Use search_field if provided, otherwise fall back to searchField for frontend compatibility
-    effective_search_field = search_field if search_field is not None else searchField
+    # Search logic
+    if search:
+        # Determine which fields to search based on filter parameter
+        # Default to 'all' if filter is not specified
+        search_filter = filter if filter is not None else 'all'
 
-    if effective_search_field is not None:
-        # Field-specific search
-        if effective_search_field == 'all':
-            if search:
-                all_prompts = search_prompts(all_prompts, search, fuzzy=fuzzy, search_field='all')
-        elif effective_search_field == 'title':
-            if search:
-                all_prompts = [p for p in all_prompts if search.lower() in p.title.lower()]
-        elif effective_search_field == 'description':
-            if search:
-                all_prompts = [p for p in all_prompts if p.description and search.lower() in p.description.lower()]
-        elif effective_search_field == 'tags':
-            if search:
-                all_prompts = [p for p in all_prompts if p.tags and any(search.lower() in tag.lower() for tag in p.tags)]
-        elif effective_search_field == 'collection':
-            if search:
-                # Get all collections
-                all_collections = storage.get_all_collections()
-                # Filter prompts whose collection name matches
-                all_prompts = [
-                    p for p in all_prompts
-                    if p.collection_id and
-                    any(c.id == p.collection_id and search.lower() in c.name.lower()
-                        for c in all_collections)
-                ]
-    elif search:
-        # Backward compatible: search all fields if searchField is not specified
-        all_prompts = search_prompts(all_prompts, search, fuzzy=fuzzy, search_field='all')
-
-    # Legacy field-specific searches (for direct API access without searchField parameter)
-    if search_title and search_field is None:
-        all_prompts = [p for p in all_prompts if search_title.lower() in p.title.lower()]
-    if search_description and search_field is None:
-        all_prompts = [p for p in all_prompts if p.description and search_description.lower() in p.description.lower()]
-    if search_tags and search_field is None:
-        all_prompts = [p for p in all_prompts if p.tags and any(search_tags.lower() in tag.lower() for tag in p.tags)]
-    if search_collection and search_field is None:
-        # Get all collections
-        all_collections = storage.get_all_collections()
-        # Filter prompts whose collection name matches
-        all_prompts = [
-            p for p in all_prompts
-            if p.collection_id and
-            any(c.id == p.collection_id and search_collection.lower() in c.name.lower()
-                for c in all_collections)
-        ]
+        if search_filter == 'all':
+            all_prompts = search_prompts(all_prompts, search, fuzzy=fuzzy, search_field='all')
+        elif search_filter == 'title':
+            all_prompts = [p for p in all_prompts if search.lower() in p.title.lower()]
+        elif search_filter == 'description':
+            all_prompts = [p for p in all_prompts if p.description and search.lower() in p.description.lower()]
+        elif search_filter == 'tags':
+            all_prompts = [p for p in all_prompts if p.tags and any(search.lower() in tag.lower() for tag in p.tags)]
+        elif search_filter == 'collection':
+            # Get all collections
+            all_collections = storage.get_all_collections()
+            # Filter prompts whose collection name matches
+            all_prompts = [
+                p for p in all_prompts
+                if p.collection_id and
+                any(c.id == p.collection_id and search.lower() in c.name.lower()
+                    for c in all_collections)
+            ]
 
     # Sort by date (newest first)
     all_prompts = sort_prompts_by_date(all_prompts, descending=True)

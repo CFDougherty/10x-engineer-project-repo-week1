@@ -155,7 +155,7 @@ class TestPrompts:
         assert prompts[1]["title"] == "Zebra"
     
     def test_list_prompts_with_filtering(self, client: TestClient):
-        """Test filtering prompts by title."""
+        """Test filtering prompts by title using search parameter."""
         prompt1 = {"title": "Apple", "content": "Fruit content"}
         prompt2 = {"title": "Banana", "content": "Another fruit"}
 
@@ -163,7 +163,7 @@ class TestPrompts:
         time.sleep(0.1)
         client.post("/prompts", json=prompt2)
 
-        response = client.get("/prompts?title=Apple")
+        response = client.get("/prompts?search=Apple")
         prompts = response.json()["prompts"]
         assert len(prompts) == 1
         assert prompts[0]["title"] == "Apple"

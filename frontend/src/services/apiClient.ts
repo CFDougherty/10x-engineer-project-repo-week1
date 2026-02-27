@@ -15,11 +15,7 @@ export const getPrompts = (params?: {
   limit?: number;
   collectionId?: string;
   search?: string;
-  searchField?: string;
-  searchTitle?: string;
-  searchDescription?: string;
-  searchTags?: string;
-  searchCollection?: string;
+  filter?: string;  // 'title' | 'description' | 'tags' | 'collection' | 'all'
   sort?: string;
 }) => apiClient.get('/prompts', { params });
 

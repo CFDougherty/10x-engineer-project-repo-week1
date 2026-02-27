@@ -30,7 +30,7 @@ def test_search_by_description_field(client: TestClient):
     client.post("/prompts", json=prompt3)
 
     # Search for "Python" in description field
-    response = client.get("/prompts?search=Python&search_field=description")
+    response = client.get("/prompts?search=Python&filter=description")
     prompts = response.json()["prompts"]
 
     # Should return only prompts with "Python" in description
@@ -62,7 +62,7 @@ def test_search_by_tags_field(client: TestClient):
     client.post("/prompts", json=prompt3)
 
     # Search for "python" in tags field
-    response = client.get("/prompts?search=python&search_field=tags")
+    response = client.get("/prompts?search=python&filter=tags")
     prompts = response.json()["prompts"]
 
     # Should return only prompts with "python" in tags
@@ -101,7 +101,7 @@ def test_search_by_collection_field(client: TestClient):
     client.post("/prompts", json=prompt3)
 
     # Search for "Python" in collection field
-    response = client.get("/prompts?search=Python&search_field=collection")
+    response = client.get("/prompts?search=Python&filter=collection")
     prompts = response.json()["prompts"]
 
     # Should return only prompts in collections with "Python" in name
@@ -130,7 +130,7 @@ def test_search_by_title_field(client: TestClient):
     client.post("/prompts", json=prompt3)
 
     # Search for "Python" in title field
-    response = client.get("/prompts?search=Python&search_field=title")
+    response = client.get("/prompts?search=Python&filter=title")
     prompts = response.json()["prompts"]
 
     # Should return only prompts with "Python" in title
@@ -156,14 +156,38 @@ def test_search_all_fields(client: TestClient):
     client.post("/prompts", json=prompt2)
 
     # Search for "Guide" across all fields
-    response = client.get("/prompts?search=Guide&search_field=all")
+    response = client.get("/prompts?search=Guide&filter=all")
     prompts = response.json()["prompts"]
 
     # Should return both prompts
     assert len(prompts) == 2
 
+def test_search_without_filter_returns_all_fields(client: TestClient):
+    """Test that searching without filter parameter searches all fields."""
+    # Create test data
+    prompt1 = {
+        "title": "Python Guide",
+        "content": "About Python programming",
+        "description": "Python tutorial"
+    }
+    prompt2 = {
+        "title": "JavaScript Guide",
+        "content": "About JavaScript programming",
+        "description": "JavaScript tutorial"
+    }
+
+    client.post("/prompts", json=prompt1)
+    client.post("/prompts", json=prompt2)
+
+    # Search for "Guide" without filter parameter
+    response = client.get("/prompts?search=Guide")
+    prompts = response.json()["prompts"]
+
+    # Should return both prompts (default behavior)
+    assert len(prompts) == 2
+
 def test_empty_search_query_returns_all_prompts(client: TestClient):
-    """Test that empty search query returns all prompts regardless of search field."""
+    """Test that empty search query returns all prompts regardless of filter."""
     # Create test data
     prompt1 = {
         "title": "Prompt 1",
@@ -179,8 +203,8 @@ def test_empty_search_query_returns_all_prompts(client: TestClient):
     client.post("/prompts", json=prompt1)
     client.post("/prompts", json=prompt2)
 
-    # Search with empty query and description field
-    response = client.get("/prompts?search=&search_field=description")
+    # Search with empty query and description filter
+    response = client.get("/prompts?search=&filter=description")
     prompts = response.json()["prompts"]
 
     # Should return all prompts when search query is empty
