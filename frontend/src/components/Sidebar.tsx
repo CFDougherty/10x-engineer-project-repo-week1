@@ -1,5 +1,5 @@
 import { Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Divider, Box, Typography } from '@mui/material';
-import { Home as HomeIcon, Folder as FolderIcon, Search as SearchIcon, Settings as SettingsIcon } from '@mui/icons-material';
+import { Home as HomeIcon, Folder as FolderIcon, Settings as SettingsIcon } from '@mui/icons-material';
 import { Link, useLocation } from 'react-router-dom';
 
 interface SidebarProps {
