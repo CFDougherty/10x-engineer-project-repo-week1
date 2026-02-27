@@ -34,10 +34,10 @@ export default function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps
   };
 
   return (
-    <Card sx={{ cursor: 'pointer', transition: 'box-shadow 0.3s' }}>
+    <Card sx={{ cursor: 'pointer', transition: 'box-shadow 0.3s', width: 350, overflow: 'hidden' }}>
       <CardContent onClick={handleClick}>
         <Box display="flex" justifyContent="space-between" alignItems="start">
-          <Typography variant="h5" component="div">
+          <Typography variant="h5" component="div" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {prompt.title}
           </Typography>
           <Box display="flex" gap={1}>
@@ -54,15 +54,17 @@ export default function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps
           Created: {formatDateTime(prompt.created_at)}
         </Typography>
 
-        <Typography variant="body2" sx={{ mb: 2 }}>
+        <Typography variant="body2" sx={{ mb: 2, wordBreak: 'break-word', whiteSpace: 'normal', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
           {prompt.content.substring(0, 100)}...
         </Typography>
 
         {prompt.tags && prompt.tags.length > 0 && (
-          <Box sx={{ mb: 2 }}>
-            {prompt.tags.map((tag: string) => (
-              <Chip key={tag} label={tag} size="small" sx={{ mr: 1, mb: 1 }} />
-            ))}
+          <Box sx={{ mb: 2, overflow: 'hidden' }}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {prompt.tags.map((tag: string) => (
+                <Chip key={tag} label={tag} size="small" sx={{ mr: 1, mb: 1 }} />
+              ))}
+            </Box>
           </Box>
         )}
       </CardContent>
@@ -71,11 +73,11 @@ export default function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps
         <Divider />
         <Box sx={{ p: 2 }}>
           {prompt.description && (
-            <Typography variant="body2" paragraph sx={{ mb: 2 }}>
+            <Typography variant="body2" paragraph sx={{ mb: 2, wordBreak: 'break-word' }}>
               <strong>Description:</strong> {prompt.description}
             </Typography>
           )}
-          <Typography variant="body1" paragraph sx={{ mb: 2 }}>
+          <Typography variant="body1" paragraph sx={{ mb: 2, wordBreak: 'break-word' }}>
             {prompt.content}
           </Typography>
 

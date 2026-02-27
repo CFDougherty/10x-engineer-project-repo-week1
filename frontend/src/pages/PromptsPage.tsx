@@ -262,22 +262,24 @@ export default function PromptsPage() {
           {prompts.map((prompt) => (
             // @ts-expect-error - prompt type has missing properties
             <Grid item xs={12} sm={6} md={4} key={prompt.id} sx={{ display: 'flex' }}>
-              <Card onClick={() => navigate(`/prompts/${prompt.id}`)} sx={{ cursor: 'pointer', '&:hover': { boxShadow: 3 } }}>
+              <Card onClick={() => navigate(`/prompts/${prompt.id}`)} sx={{ cursor: 'pointer', '&:hover': { boxShadow: 3 }, width: 350, overflow: 'hidden' }}>
                 <CardContent>
-                  <Typography variant="h5" component="div">
+                  <Typography variant="h5" component="div" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {prompt.title}
                   </Typography>
                   <Typography sx={{ mb: 1.5 }} color="text.secondary">
                     Created: {formatDateTime(prompt.created_at)}
                   </Typography>
-                  <Typography variant="body2" sx={{ mb: 2 }}>
+                  <Typography variant="body2" sx={{ mb: 2, wordBreak: 'break-word', whiteSpace: 'normal', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
                     {prompt.content}
                   </Typography>
                   {prompt.tags && prompt.tags.length > 0 && (
-                    <Box sx={{ mb: 2 }}>
-                      {prompt.tags.map((tag: string) => (
-                        <Chip key={tag} label={tag} size="small" sx={{ mr: 1, mb: 1 }} />
-                      ))}
+                    <Box sx={{ mb: 2, overflow: 'hidden' }}>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {prompt.tags.map((tag: string) => (
+                          <Chip key={tag} label={tag} size="small" sx={{ mr: 1, mb: 1 }} />
+                        ))}
+                      </Box>
                     </Box>
                   )}
                 </CardContent>
