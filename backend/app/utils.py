@@ -2,7 +2,7 @@
 
 from typing import List, Tuple
 from app.models import Prompt
-from rapidfuzz import fuzz, process
+from fuzzysearch import find_near_matches
 
 def sort_prompts_by_date(prompts: List[Prompt], descending: bool = True) -> List[Prompt]:
     """Sorts a list of prompts by their creation timestamp.
@@ -42,16 +42,15 @@ def filter_prompts_by_collection(prompts: List[Prompt], collection_id: str) -> L
 def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True) -> List[Prompt]:
     """Search prompts by title, content, description, and tags.
 
-    This helper scans the provided `prompts` and returns only those where `query`
-    matches against the prompt's title, content, description, or tags.
+    Uses fuzzysearch for real-time search with good performance.
 
     Args:
-        prompts: List of `Prompt` instances to search.
+        prompts: List of Prompt instances to search.
         query: Search text to look for within each prompt's fields.
-        fuzzy: If True (default), uses fuzzy string matching. If False, uses exact substring matching.
+        fuzzy: If True, uses fuzzy matching. If False, uses exact substring matching.
 
     Returns:
-        A list of `Prompt` instances that match the query, sorted by relevance score
+        A list of Prompt instances that match the query, sorted by match quality
         (if fuzzy search is enabled) or in the original order (if exact matching).
     """
     if not query or not query.strip():
@@ -60,7 +59,7 @@ def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True) -> Lis
     query_lower = query.lower().strip()
 
     if not fuzzy:
-        # Exact substring matching (original behavior)
+        # Exact substring matching
         return [
             p for p in prompts
             if query_lower in p.title.lower() or
@@ -69,51 +68,50 @@ def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True) -> Lis
                (p.tags and any(query_lower in tag.lower() for tag in p.tags))
         ]
 
-    # Fuzzy search using rapidfuzz
-    # Combine all searchable fields into a single string for each prompt
-    searchable_prompts = []
+    # Fuzzy search using fuzzysearch
+    # For each prompt, check all searchable fields
+    matches = []
+
     for p in prompts:
-        # Build a composite search string from all fields
-        fields = [
-            p.title,
-            p.content,
+        # Check each field individually for better matching
+        fields_to_check = [
+            p.title.lower(),
+            p.content.lower(),
         ]
-        # Only add description if it's not None
-        if p.description is not None:
-            fields.append(p.description)
-        # Only add tags if they exist
+        if p.description:
+            fields_to_check.append(p.description.lower())
         if p.tags:
-            fields.append(" ".join(p.tags))
-        search_string = " ".join(fields).lower()
-        searchable_prompts.append(search_string)
+            fields_to_check.append(" ".join(p.tags).lower())
 
-    # Use rapidfuzz to find best matches with scores
-    # For very short queries (1-2 chars), use a lower cutoff to allow character matching
-    # For short single-word queries (3-20 chars), use a higher cutoff to avoid false positives
-    # For longer queries, use a lower cutoff to allow for more flexibility
-    if len(query_lower) <= 2:
-        # Very short query (1-2 characters) - allow character matching
-        score_cutoff = 55
-    elif len(query_lower.split()) == 1 and len(query_lower) < 20:
-        # Single word query (3-20 chars) - be more strict
-        score_cutoff = 65
-    else:
-        # Multi-word or longer query - be more lenient
-        score_cutoff = 60
+        # Find matches in each field
+        for field in fields_to_check:
+            # Use a more strict distance threshold
+            max_dist = max(1, len(query_lower) // 2)  # At most half the query length
+            near_matches = find_near_matches(
+                query_lower,
+                field,
+                max_l_dist=max_dist
+            )
 
-    results = process.extract(query_lower, searchable_prompts, scorer=fuzz.WRatio, score_cutoff=score_cutoff)
+            if near_matches:
+                # Only consider matches with reasonable distance
+                # Distance should be less than or equal to 2 for good matches
+                good_matches = [m for m in near_matches if m.dist <= 2]
+                if good_matches:
+                    best_match = min(good_matches, key=lambda m: m.start)
+                    # Better scoring: prioritize earlier matches and shorter distance
+                    # Title matches get a bonus to appear first
+                    field_weight = 2.0 if field == p.title.lower() else 1.0
+                    score = 100 * field_weight - (best_match.start * 2) - (best_match.dist * 5)
+                    # Ensure score doesn't go below 0
+                    score = max(0, score)
+                    matches.append((score, p))
+                    break  # Only use the best field match for this prompt
 
-    # Create a dictionary mapping search strings to prompts for lookup
-    search_string_to_prompt = {search_string: p for search_string, p in zip(searchable_prompts, prompts)}
-
-    # Extract prompts in order of best match
-    matched_prompts = []
-    for match in results:
-        search_string = match[0]
-        if search_string in search_string_to_prompt:
-            matched_prompts.append(search_string_to_prompt[search_string])
-
-    return matched_prompts
+    # Sort by score (descending) to get best matches first
+    matches.sort(reverse=True, key=lambda x: x[0])
+    # Filter out very low-quality matches (score < 30)
+    return [p for score, p in matches if score >= 30]
 
 def validate_prompt_content(content: str) -> bool:
     """Validates that a prompt's content is non-empty and meets a minimum length.
