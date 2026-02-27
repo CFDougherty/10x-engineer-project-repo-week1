@@ -1,11 +1,8 @@
 import { useState, useEffect } from 'react';
 import { usePrompts } from '../hooks/usePrompts';
 import { useCollections } from '../contexts/CollectionsContext';
-import { useNavigate } from 'react-router-dom';
+import type { Prompt } from '../types/prompt';
 import {
-  Card,
-  CardContent,
-  CardActions,
   Typography,
   CircularProgress,
   Alert,
@@ -14,27 +11,25 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Chip,
   Box,
-  IconButton,
   MenuItem,
   FormControl,
   InputLabel,
   Select
 } from '@mui/material';
 import { Grid } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Add as AddIcon } from '@mui/icons-material';
 import PromptCreationDialog from '../components/PromptCreationDialog';
 import CollectionCreationDialog from '../components/CollectionCreationDialog';
 import SearchBar from '../components/SearchBar';
 import Button from '../components/Button';
-import { formatDateTime } from '../utils/dateUtils';
+import PromptCard from '../components/PromptCard';
 
 export default function PromptsPage() {
   const { prompts, loading, error, update, remove, refetch } = usePrompts();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editingPrompt, setEditingPrompt] = useState<any>(null);
+  const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null);
   const [editFormData, setEditFormData] = useState({
     title: '',
     content: '',
@@ -45,7 +40,6 @@ export default function PromptsPage() {
   const [selectedCollection, setSelectedCollection] = useState('');
   const [showCollectionDialog, setShowCollectionDialog] = useState(false);
   const { collections } = useCollections();
-  const navigate = useNavigate();
 
   // Apply search and filter
   useEffect(() => {
@@ -67,15 +61,18 @@ export default function PromptsPage() {
     setCreateDialogOpen(true);
   };
 
-  const handleEdit = (prompt: any) => {
-    setEditingPrompt(prompt);
-    setEditFormData({
-      title: prompt.title,
-      content: prompt.content,
-      tags: prompt.tags?.join(', ') || '',
-      collectionId: prompt.collection_id || '',
-    });
-    setEditDialogOpen(true);
+  const handleEdit = (promptId: string) => {
+    const prompt = prompts.find(p => p.id === promptId);
+    if (prompt) {
+      setEditingPrompt(prompt);
+      setEditFormData({
+        title: prompt.title,
+        content: prompt.content,
+        tags: prompt.tags?.join(', ') || '',
+        collectionId: prompt.collection_id || '',
+      });
+      setEditDialogOpen(true);
+    }
   };
 
   const handleCloseEdit = () => {
@@ -84,6 +81,7 @@ export default function PromptsPage() {
 
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!editingPrompt) return;
     try {
       const tagsArray = editFormData.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean);
       const promptData = {
@@ -262,36 +260,11 @@ export default function PromptsPage() {
           {prompts.map((prompt) => (
             // @ts-expect-error - prompt type has missing properties
             <Grid item xs={12} sm={6} md={4} key={prompt.id} sx={{ display: 'flex' }}>
-              <Card onClick={() => navigate(`/prompts/${prompt.id}`)} sx={{ cursor: 'pointer', '&:hover': { boxShadow: 3 }, width: 350, overflow: 'hidden' }}>
-                <CardContent>
-                  <Typography variant="h5" component="div" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {prompt.title}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }} color="text.secondary">
-                    Created: {formatDateTime(prompt.created_at)}
-                  </Typography>
-                  <Typography variant="body2" sx={{ mb: 2, wordBreak: 'break-word', whiteSpace: 'normal', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
-                    {prompt.content}
-                  </Typography>
-                  {prompt.tags && prompt.tags.length > 0 && (
-                    <Box sx={{ mb: 2, overflow: 'hidden' }}>
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                        {prompt.tags.map((tag: string) => (
-                          <Chip key={tag} label={tag} size="small" sx={{ mr: 1, mb: 1 }} />
-                        ))}
-                      </Box>
-                    </Box>
-                  )}
-                </CardContent>
-                <CardActions>
-                  <IconButton onClick={(e) => { e.stopPropagation(); handleEdit(prompt); }} aria-label="edit">
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton onClick={(e) => { e.stopPropagation(); handleDelete(prompt.id); }} aria-label="delete">
-                    <DeleteIcon />
-                  </IconButton>
-                </CardActions>
-              </Card>
+              <PromptCard
+                prompt={prompt}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
             </Grid>
           ))}
         </Grid>
