@@ -30,6 +30,10 @@ export const patchPrompt = (id: string, promptData: any) =>
 
 export const deletePrompt = (id: string) => apiClient.delete(`/prompts/${id}`);
 
+// Version history API endpoints
+export const getPromptVersions = (promptId: string) =>
+  apiClient.get(`/prompts/${promptId}/versions`);
+
 // Collection API endpoints
 export const getCollections = () => apiClient.get('/collections');
 

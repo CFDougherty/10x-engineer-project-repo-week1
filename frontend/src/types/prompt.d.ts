@@ -24,3 +24,16 @@ export interface PromptUpdate {
   version?: string;
   collection_id?: string;
 }
+
+export interface VersionSummary {
+  version: number;
+  created_at: string;
+  title: string;
+  description?: string;
+}
+
+export interface VersionList {
+  prompt_id: string;
+  versions: VersionSummary[];
+  total: number;
+}

@@ -27,6 +27,7 @@ import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/ico
 import PromptCreationDialog from '../components/PromptCreationDialog';
 import SearchBar from '../components/SearchBar';
 import Button from '../components/Button';
+import { formatDateTime } from '../utils/dateUtils';
 
 export default function PromptsPage() {
   const { prompts, loading, error, update, remove, refetch } = usePrompts();
@@ -251,7 +252,7 @@ export default function PromptsPage() {
                     {prompt.title}
                   </Typography>
                   <Typography sx={{ mb: 1.5 }} color="text.secondary">
-                    Created: {new Date(prompt.created_at).toLocaleDateString()}
+                    Created: {formatDateTime(prompt.created_at)}
                   </Typography>
                   <Typography variant="body2" sx={{ mb: 2 }}>
                     {prompt.content}

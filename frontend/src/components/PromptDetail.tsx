@@ -15,9 +15,11 @@ import {
   TextField,
   MenuItem,
 } from '@mui/material';
-import { Delete as DeleteIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, ArrowBack as ArrowBackIcon, History as HistoryIcon } from '@mui/icons-material';
 import ConfirmationDialog from './ConfirmationDialog';
+import VersionHistoryDialog from './VersionHistoryDialog';
 import { useCollections } from '../hooks/useCollections';
+import { formatDateTime } from '../utils/dateUtils';
 
 export default function PromptDetail() {
   const { id } = useParams<{ id: string }>();
@@ -33,6 +35,7 @@ export default function PromptDetail() {
     collectionId: '',
   });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const { collections } = useCollections();
 
   useEffect(() => {
@@ -141,11 +144,11 @@ export default function PromptDetail() {
             </Typography>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
               <Typography color="text.secondary">
-                Created: {new Date(prompt.created_at).toLocaleDateString()}
+                Created: {formatDateTime(prompt.created_at)}
               </Typography>
               {prompt.updated_at && prompt.updated_at !== prompt.created_at && (
                 <Typography color="text.secondary">
-                  Updated: {new Date(prompt.updated_at).toLocaleDateString()}
+                  Updated: {formatDateTime(prompt.updated_at)}
                 </Typography>
               )}
             </Box>
@@ -168,6 +171,13 @@ export default function PromptDetail() {
             </Typography>
           </CardContent>
           <CardActions>
+            <Button
+              size="small"
+              startIcon={<HistoryIcon />}
+              onClick={() => setVersionHistoryOpen(true)}
+            >
+              Version History
+            </Button>
             <Button size="small" onClick={() => setEditMode(true)}>
               Edit
             </Button>
@@ -237,6 +247,12 @@ export default function PromptDetail() {
         title="Delete Prompt"
         message="Are you sure you want to delete this prompt? This action cannot be undone."
         confirmText="Delete"
+      />
+
+      <VersionHistoryDialog
+        open={versionHistoryOpen}
+        onClose={() => setVersionHistoryOpen(false)}
+        promptId={prompt?.id || ''}
       />
     </div>
   );
