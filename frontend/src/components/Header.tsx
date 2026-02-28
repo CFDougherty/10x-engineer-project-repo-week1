@@ -1,13 +1,14 @@
-import { AppBar, Toolbar, Typography, Button, IconButton } from '@mui/material';
+import { AppBar, Toolbar, Typography, Button, IconButton, Tooltip } from '@mui/material';
 import { Link } from 'react-router-dom';
-import { Menu as MenuIcon } from '@mui/icons-material';
+import { Menu as MenuIcon, SettingsApplications } from '@mui/icons-material';
 
 interface HeaderProps {
   onMenuClick?: () => void;
   isMobile?: boolean;
+  onAdminClick?: () => void;
 }
 
-export default function Header({ onMenuClick, isMobile = false }: HeaderProps) {
+export default function Header({ onMenuClick, isMobile = false, onAdminClick }: HeaderProps) {
   return (
     <AppBar position="static">
       <Toolbar>
@@ -35,6 +36,13 @@ export default function Header({ onMenuClick, isMobile = false }: HeaderProps) {
               Collections
             </Button>
           </>
+        )}
+        {onAdminClick && (
+          <Tooltip title="Admin Tools">
+            <IconButton color="inherit" onClick={onAdminClick} sx={{ color: 'error.main' }}>
+              <SettingsApplications />
+            </IconButton>
+          </Tooltip>
         )}
       </Toolbar>
     </AppBar>

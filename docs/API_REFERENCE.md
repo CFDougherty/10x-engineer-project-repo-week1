@@ -1065,6 +1065,98 @@ No response body.
 
 ---
 
+### Admin
+
+#### POST `/admin/populate-test-data`
+Populate the database with realistic test data.
+
+**Request**
+
+- No parameters
+- No body
+
+**curl**
+
+```bash
+curl -sS -X POST "http://localhost:8000/admin/populate-test-data"
+```
+
+**fetch**
+
+```javascript
+const res = await fetch('http://localhost:8000/admin/populate-test-data', {
+  method: 'POST',
+});
+const data = await res.json();
+console.log(data);
+```
+
+**Success response — 200**
+
+```json
+{
+  "status": "success",
+  "message": "Test data populated successfully",
+  "prompts_created": 40,
+  "collections_created": 4
+}
+```
+
+**Errors**
+
+- `500 Internal Server Error` (if data population fails)
+
+```json
+{ "detail": "Failed to populate test data" }
+```
+
+---
+
+#### DELETE `/admin/clear-all-data`
+Clear all prompts and collections from the database.
+
+**Request**
+
+- No parameters
+- No body
+
+**curl**
+
+```bash
+curl -sS -X DELETE "http://localhost:8000/admin/clear-all-data"
+```
+
+**fetch**
+
+```javascript
+const res = await fetch('http://localhost:8000/admin/clear-all-data', {
+  method: 'DELETE',
+});
+const data = await res.json();
+console.log(data);
+```
+
+**Success response — 200**
+
+```json
+{
+  "status": "success",
+  "message": "All data cleared successfully",
+  "prompts_removed": 40,
+  "collections_removed": 4
+}
+```
+
+**Errors**
+
+- `500 Internal Server Error` (if data clearing fails)
+
+```json
+{ "detail": "Failed to clear data" }
+```
+
+---
+
 ### Prompt Versioning
 
 #### GET `/prompts/{prompt_id}/versions`

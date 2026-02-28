@@ -61,3 +61,8 @@ export const addPromptToCollection = (collectionId: string, promptId: string) =>
 // Remove prompt from collection
 export const removePromptFromCollection = (collectionId: string, promptId: string) =>
   apiClient.delete(`/collections/${collectionId}/prompts/${promptId}`);
+
+// Admin API endpoints
+export const populateTestData = () => apiClient.post('/admin/populate-test-data');
+
+export const clearAllData = () => apiClient.delete('/admin/clear-all-data');

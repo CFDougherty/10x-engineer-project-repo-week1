@@ -26,8 +26,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi import status
 from typing import Optional
+import uuid
+import asyncio
 from fastapi import FastAPI, HTTPException, Path, Body, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi import HTTPException, status
 from fastapi.exceptions import RequestValidationError
 from fastapi import Request
@@ -570,6 +572,312 @@ def delete_collection(collection_id: str):
         raise HTTPException(status_code=404, detail="Collection not found")
 
     return None
+
+# ============== SSE Endpoint ==============
+
+# Store active SSE connections and their message queues
+from collections import defaultdict, deque
+sse_connections = defaultdict(list)
+
+async def notify_sse_clients(message: str):
+    """Notify all SSE clients about data changes."""
+    import asyncio
+    tasks = []
+    for connection in sse_connections["clients"]:
+        try:
+            # Create SSE message
+            sse_message = f"data: {message}\n\n"
+            await connection.write(sse_message)
+            await connection.drain()
+        except Exception as e:
+            # Remove disconnected clients
+            if connection in sse_connections["clients"]:
+                sse_connections["clients"].remove(connection)
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+@app.get("/admin/events")
+async def sse_endpoint(request: Request):
+    """Server-Sent Events endpoint for real-time data change notifications.
+
+    Clients can subscribe to this endpoint to receive notifications when
+    data is populated or cleared.
+
+    Returns:
+        StreamingResponse: SSE stream that sends data change events.
+    """
+    async def event_stream():
+        # Send initial connection confirmation
+        yield 'data: {"event": "connected", "message": "Connected to SSE stream"}\n\n'
+
+        # Keep connection open indefinitely
+        while True:
+            try:
+                # Send keep-alive every 15 seconds
+                await asyncio.sleep(15)
+                yield ': keep-alive\n\n'
+
+            except asyncio.CancelledError:
+                # Connection was closed by client
+                raise
+            except Exception as e:
+                # Log error and continue
+                print(f"SSE stream error: {e}")
+                await asyncio.sleep(1)
+                yield ': keep-alive\n\n'
+
+    response = StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "cache-control",
+        }
+    )
+
+    # Register client connection after creating the response
+    sse_connections["clients"].append(response)
+
+    # Clean up on disconnection
+    async def cleanup():
+        if response in sse_connections["clients"]:
+            sse_connections["clients"].remove(response)
+
+    response.on_disconnect = cleanup
+
+    return response
+
+# ============== Admin Endpoints ==============
+
+@app.post("/admin/populate-test-data")
+async def populate_test_data():
+    """Populate the database with realistic test data.
+
+    This endpoint directly calls the data generation functions to create
+    sample prompts and collections for testing purposes.
+
+    Returns:
+        A response object containing:
+            - status: Operation status
+            - message: Success message
+            - prompts_created: Number of prompts created
+            - collections_created: Number of collections created
+    """
+    try:
+        # Clear existing data first
+        storage.clear()
+
+        # Define prompt topics
+        prompt_topics = [
+            "Chatbot Personality", "Data Analysis", "Creative Writing",
+            "Technical Documentation", "Customer Support", "Content Generation",
+            "Code Review", "API Design", "Database Optimization",
+            "Security Audit", "Performance Testing", "UX Research",
+            "Product Management", "Marketing Strategy", "Sales Script",
+            "Email Campaign", "Social Media Post", "Blog Article",
+            "Technical Interview", "System Design", "Algorithm Explanation",
+            "Debugging Guide", "CI/CD Pipeline", "DevOps Best Practices",
+            "Cloud Architecture", "Microservices", "Monolith Conversion",
+            "API Gateway", "Service Mesh", "Containerization",
+            "Orchestration", "Infrastructure as Code", "Observability",
+            "Monitoring", "Logging", "Tracing", "Incident Response",
+            "Disaster Recovery", "Backup Strategy", "Compliance Check",
+            "Risk Assessment", "Threat Modeling", "Penetration Testing"
+        ]
+
+        # Define tag categories
+        tag_categories = [
+            ["AI", "Machine Learning", "Deep Learning", "NLP", "Computer Vision"],
+            ["Chatbot", "Virtual Assistant", "Conversational AI", "Dialogue Systems"],
+            ["Data Analysis", "Data Science", "Statistics", "Visualization", "ETL"],
+            ["Creative Writing", "Storytelling", "Content Creation", "Copywriting"],
+            ["Technical", "Documentation", "API", "SDK", "Library"],
+            ["Testing", "QA", "Automation", "Unit Test", "Integration Test"],
+            ["Security", "Compliance", "Audit", "Risk", "Threat"],
+            ["DevOps", "CI/CD", "Infrastructure", "Cloud", "Container"],
+            ["Product", "Management", "Strategy", "Roadmap", "Prioritization"],
+            ["Marketing", "Sales", "Customer", "Support", "Engagement"]
+        ]
+
+        # Define collection themes
+        collection_themes = [
+            "AI Assistants",
+            "Creative Writing Prompts",
+            "Data Analysis Templates",
+            "Technical Documentation",
+            "Customer Support Scripts",
+            "Content Generation",
+            "Code Review Guidelines",
+            "API Design Patterns",
+            "DevOps Best Practices",
+            "Security and Compliance"
+        ]
+
+        # Generate prompts
+        import random
+        random.seed(42)  # For reproducible results
+
+        created_prompts = []
+        for i in range(40):
+            topic = random.choice(prompt_topics)
+            modifiers = [
+                "Guide for", "Template for", "Best Practices for",
+                "Checklist for", "Framework for", "Strategy for",
+                "Tactics for", "Approach to", "Methodology for",
+                "How to", "The Art of", "Mastering", "Essentials of"
+            ]
+            modifier = random.choice(modifiers)
+            title = f"{modifier} {topic}"
+
+            # Generate content
+            paragraphs = []
+            paragraphs.append(
+                f"This prompt is designed to help with {random.choice(['creating', 'developing', 'improving', 'optimizing'])} "
+                f"{random.choice(['solutions', 'strategies', 'approaches', 'implementations'])} related to {title.lower()}. "
+                f"It provides a structured framework for {random.choice(['generating', 'evaluating', 'documenting', 'testing'])} "
+                f"{random.choice(['ideas', 'code', 'content', 'systems'])} in the context of {title.lower()}."
+            )
+
+            paragraphs.append("Key considerations:")
+            for j in range(3, 8):
+                paragraphs.append(
+                    f"- {random.choice(['Consider', 'Evaluate', 'Analyze', 'Document', 'Test'])} the {random.choice(['impact', 'effectiveness', 'quality', 'performance'])} "
+                    f"of {random.choice(['your', 'the', 'this'])} {title.lower()} implementation"
+                )
+
+            paragraphs.append("\nBest practices:")
+            for j in range(3, 6):
+                paragraphs.append(
+                    f"- Always {random.choice(['validate', 'test', 'document', 'review', 'optimize'])} your {title.lower()} "
+                    f"before {random.choice(['deployment', 'release', 'sharing', 'presentation'])}"
+                )
+
+            paragraphs.append(
+                f"By following this prompt, you should be able to {random.choice(['create', 'develop', 'improve', 'optimize'])} "
+                f"high-quality {title.lower()} solutions that meet your requirements."
+            )
+
+            content = "\n\n".join(paragraphs)
+            description = (
+                f"A comprehensive prompt for {title.lower()}, covering key aspects and best practices. "
+                f"This template helps ensure consistency and quality in your {title.lower()} work."
+            )
+
+            # Generate tags
+            relevant_categories = []
+            title_lower = title.lower()
+            for category in tag_categories:
+                for tag in category:
+                    if any(word in title_lower for word in tag.lower().split()):
+                        relevant_categories.append(category)
+                        break
+
+            if not relevant_categories:
+                relevant_categories = random.sample(tag_categories, min(3, len(tag_categories)))
+
+            tags = []
+            for category in relevant_categories[:3]:
+                if category:
+                    tags.append(random.choice(category))
+
+            while len(tags) < 3:
+                generic_tags = ["AI", "Template", "Best Practices", "Guide", "Framework"]
+                new_tag = random.choice(generic_tags)
+                if new_tag not in tags:
+                    tags.append(new_tag)
+
+            # Create prompt
+            from app.models import Prompt
+            prompt_obj = Prompt(
+                id=str(uuid.uuid4()),
+                title=title,
+                content=content,
+                description=description,
+                tags=list(set(tags))  # Remove duplicates
+            )
+            storage.create_prompt(prompt_obj)
+            storage.create_prompt_version(prompt_obj.id, prompt_obj)
+            created_prompts.append(prompt_obj)
+
+        # Generate collections
+        created_collections = []
+        for i in range(4):
+            name = random.choice(collection_themes)
+            description = (
+                f"A curated collection of prompts focused on {name.lower()}. "
+                f"These templates help standardize and improve your work in this area."
+            )
+
+            from app.models import Collection
+            collection_obj = Collection(
+                id=str(uuid.uuid4()),
+                name=name,
+                description=description
+            )
+            storage.create_collection(collection_obj)
+            created_collections.append(collection_obj)
+
+        # Randomly assign prompts to collections
+        for prompt in created_prompts:
+            if random.random() < 0.6 and created_collections:  # 60% chance
+                collection = random.choice(created_collections)
+                prompt.collection_id = collection.id
+                storage.update_prompt(prompt.id, prompt)
+
+        # Notify clients about data change
+        await notify_sse_clients('{"event": "data_changed", "message": "Test data populated", "action": "populate"}')
+
+        return {
+            "status": "success",
+            "message": "Test data populated successfully",
+            "prompts_created": len(created_prompts),
+            "collections_created": len(created_collections)
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to populate test data: {str(e)}"
+        )
+
+@app.delete("/admin/clear-all-data")
+async def clear_all_data():
+    """Clear all prompts and collections from the database.
+
+    This endpoint clears all data from storage, including prompts,
+    collections, and their version history.
+
+    Returns:
+        A response object containing:
+            - status: Operation status
+            - message: Success message
+            - prompts_removed: Number of prompts removed
+            - collections_removed: Number of collections removed
+    """
+    try:
+        # Count items before clearing
+        prompts_before = len(storage.get_all_prompts())
+        collections_before = len(storage.get_all_collections())
+
+        # Clear all data
+        storage.clear()
+
+        # Notify clients about data change
+        await notify_sse_clients('{"event": "data_changed", "message": "All data cleared", "action": "clear"}')
+
+        return {
+            "status": "success",
+            "message": "All data cleared successfully",
+            "prompts_removed": prompts_before,
+            "collections_removed": collections_before
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to clear data: {str(e)}"
+        )
 
 # ============== Versioning Endpoints ==============
 
