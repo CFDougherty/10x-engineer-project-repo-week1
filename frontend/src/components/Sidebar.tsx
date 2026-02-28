@@ -1,6 +1,7 @@
 import { Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Divider, Box, Typography } from '@mui/material';
-import { Home as HomeIcon, Folder as FolderIcon, Settings as SettingsIcon } from '@mui/icons-material';
+import { Home as HomeIcon, Folder as FolderIcon, Settings as SettingsIcon, MenuBook as MenuBookIcon } from '@mui/icons-material';
 import { Link, useLocation } from 'react-router-dom';
+import { API_BASE_URL } from '../services/apiClient';
 
 interface SidebarProps {
   open: boolean;
@@ -58,6 +59,18 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             </ListItemButton>
           </ListItem>
         ))}
+        <ListItem disablePadding>
+          <ListItemButton
+            component="a"
+            href={`${API_BASE_URL}/docs#/`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={onClose}
+          >
+            <ListItemIcon><MenuBookIcon /></ListItemIcon>
+            <ListItemText primary="Docs" />
+          </ListItemButton>
+        </ListItem>
       </List>
       <Divider sx={{ mt: 'auto' }} />
       <List>

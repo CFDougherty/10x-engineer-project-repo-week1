@@ -1,6 +1,7 @@
 import { AppBar, Toolbar, Typography, Button, IconButton, Tooltip } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { Menu as MenuIcon, SettingsApplications } from '@mui/icons-material';
+import { API_BASE_URL } from '../services/apiClient';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -34,6 +35,9 @@ export default function Header({ onMenuClick, isMobile = false, onAdminClick }: 
             </Button>
             <Button color="inherit" component={Link} to="/collections">
               Collections
+            </Button>
+            <Button color="inherit" href={`${API_BASE_URL}/docs#/`} target="_blank" rel="noopener noreferrer">
+              Docs
             </Button>
           </>
         )}
