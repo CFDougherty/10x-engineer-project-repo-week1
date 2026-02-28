@@ -1,4 +1,4 @@
-import { TextField, InputAdornment, Select, MenuItem, FormControl } from '@mui/material';
+import { TextField, InputAdornment, Select, MenuItem, FormControl, CircularProgress } from '@mui/material';
 import type { TextFieldProps } from '@mui/material';
 import { Search as SearchIcon } from '@mui/icons-material';
 import { useRef, useEffect } from 'react';
@@ -10,6 +10,8 @@ interface SearchBarProps extends Omit<TextFieldProps, 'onChange' | 'value'> {
   size?: 'small' | 'medium';
   searchField?: string;
   onSearchFieldChange?: (field: string) => void;
+  onSearch?: () => void;
+  loading?: boolean;
 }
 
 export default function SearchBar({
@@ -19,6 +21,8 @@ export default function SearchBar({
   size = 'small',
   searchField = 'all',
   onSearchFieldChange,
+  onSearch,
+  loading = false,
 }: SearchBarProps) {
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     onChange(event.target.value);
@@ -27,6 +31,12 @@ export default function SearchBar({
   const handleSearchFieldChange = (event: any) => {
     if (onSearchFieldChange) {
       onSearchFieldChange(event.target.value);
+    }
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && onSearch) {
+      onSearch();
     }
   };
 
@@ -47,12 +57,13 @@ export default function SearchBar({
         size={size}
         value={value}
         onChange={handleChange}
+        onKeyDown={handleKeyDown}
         placeholder={placeholder}
         inputRef={inputRef}
         InputProps={{
           startAdornment: (
             <InputAdornment position="start">
-              <SearchIcon />
+              {loading ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
             </InputAdornment>
           ),
         }}

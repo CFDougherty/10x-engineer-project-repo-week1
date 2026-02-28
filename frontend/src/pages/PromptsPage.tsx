@@ -27,6 +27,7 @@ export default function PromptsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [selectedCollection, setSelectedCollection] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
   const { collections } = useCollections();
 
   // Apply search and filter
@@ -44,7 +45,28 @@ export default function PromptsPage() {
     } else {
       refetch();
     }
-  }, [searchQuery, filter, selectedCollection, refetch]);
+  }, [filter, selectedCollection, refetch]);
+
+  const handleSearch = async () => {
+    setSearchLoading(true);
+    try {
+      const params: any = {};
+      if (searchQuery) {
+        params.search = searchQuery;
+        params.filter = filter;
+      }
+      if (selectedCollection) {
+        params.collectionId = selectedCollection;
+      }
+      if (Object.keys(params).length > 0) {
+        await refetch(params);
+      } else {
+        await refetch();
+      }
+    } finally {
+      setSearchLoading(false);
+    }
+  };
 
   const handleOpen = () => {
     setCreateDialogOpen(true);
@@ -106,9 +128,11 @@ export default function PromptsPage() {
             <SearchBar
               value={searchQuery}
               onChange={setSearchQuery}
+              onSearch={handleSearch}
               searchField={filter}
               onSearchFieldChange={setFilter}
               placeholder="Search prompts..."
+              loading={searchLoading}
               sx={{ flexGrow: 1 }}
             />
             <FormControl sx={{ minWidth: 200 }}>
