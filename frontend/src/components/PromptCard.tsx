@@ -9,7 +9,7 @@ import {
   Collapse,
   Divider
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Edit as EditIcon, Delete as DeleteIcon, History as HistoryIcon } from '@mui/icons-material';
 import { formatDateTime } from '../utils/dateUtils';
 
 interface PromptCardProps {
@@ -24,9 +24,10 @@ interface PromptCardProps {
   };
   onEdit: (promptId: string) => void;
   onDelete: (promptId: string) => void;
+  onViewHistory: (promptId: string) => void;
 }
 
-export default function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
+export default function PromptCard({ prompt, onEdit, onDelete, onViewHistory }: PromptCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   const handleClick = () => {
@@ -43,6 +44,9 @@ export default function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps
           <Box display="flex" gap={1}>
             <IconButton size="small" onClick={(e) => { e.stopPropagation(); onEdit(prompt.id); }}>
               <EditIcon fontSize="small" />
+            </IconButton>
+            <IconButton size="small" onClick={(e) => { e.stopPropagation(); onViewHistory(prompt.id); }}>
+              <HistoryIcon fontSize="small" />
             </IconButton>
             <IconButton size="small" onClick={(e) => { e.stopPropagation(); onDelete(prompt.id); }}>
               <DeleteIcon fontSize="small" />

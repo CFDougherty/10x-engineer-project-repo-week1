@@ -18,6 +18,7 @@ import PromptFormDialog from '../components/PromptCreationDialog';
 import SearchBar from '../components/SearchBar';
 import Button from '../components/Button';
 import PromptCard from '../components/PromptCard';
+import VersionHistoryDialog from '../components/VersionHistoryDialog';
 
 export default function PromptsPage() {
   const { prompts, loading, error, create, update, remove, refetch } = usePrompts();
@@ -28,6 +29,7 @@ export default function PromptsPage() {
   const [filter, setFilter] = useState('all');
   const [selectedCollection, setSelectedCollection] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
+  const [historyPromptId, setHistoryPromptId] = useState<string | null>(null);
   const { collections } = useCollections();
 
   const filteredPrompts = useMemo(() => {
@@ -89,6 +91,10 @@ export default function PromptsPage() {
     } catch (err) {
       console.error('Error saving prompt:', err);
     }
+  };
+
+  const handleViewHistory = (promptId: string) => {
+    setHistoryPromptId(promptId);
   };
 
   const handleDelete = async (id: string) => {
@@ -194,6 +200,12 @@ export default function PromptsPage() {
         onSubmit={handleEditSubmit}
       />
 
+      <VersionHistoryDialog
+        open={historyPromptId !== null}
+        onClose={() => setHistoryPromptId(null)}
+        promptId={historyPromptId ?? ''}
+      />
+
       {filteredPrompts.length === 0 ? (
         <Alert severity="info">No prompts found. Create your first prompt!</Alert>
       ) : (
@@ -205,6 +217,7 @@ export default function PromptsPage() {
                 prompt={prompt}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                onViewHistory={handleViewHistory}
               />
             </Grid>
           ))}

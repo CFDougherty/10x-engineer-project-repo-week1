@@ -21,6 +21,7 @@ import { Grid } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import ConfirmationDialog from '../components/ConfirmationDialog';
 import PromptCard from '../components/PromptCard';
+import VersionHistoryDialog from '../components/VersionHistoryDialog';
 
 export default function CollectionsPage() {
   const navigate = useNavigate();
@@ -34,6 +35,7 @@ export default function CollectionsPage() {
   });
   const [promptToDelete, setPromptToDelete] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [historyPromptId, setHistoryPromptId] = useState<string | null>(null);
 
   // Get prompts for the currently viewed collection
   const collectionPrompts = viewingCollectionId
@@ -194,6 +196,7 @@ export default function CollectionsPage() {
                     prompt={prompt}
                     onEdit={handlePromptEdit}
                     onDelete={handlePromptDelete}
+                    onViewHistory={(id) => setHistoryPromptId(id)}
                   />
                 </Grid>
               ))}
@@ -243,6 +246,12 @@ export default function CollectionsPage() {
         title="Delete Prompt"
         message="Are you sure you want to delete this prompt? This action cannot be undone."
         confirmText="Delete"
+      />
+
+      <VersionHistoryDialog
+        open={historyPromptId !== null}
+        onClose={() => setHistoryPromptId(null)}
+        promptId={historyPromptId ?? ''}
       />
     </div>
   );
