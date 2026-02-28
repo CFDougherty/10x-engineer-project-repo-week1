@@ -11,7 +11,7 @@ interface HeaderProps {
 
 export default function Header({ onMenuClick, isMobile = false, onAdminClick }: HeaderProps) {
   return (
-    <AppBar position="static">
+    <AppBar position="sticky">
       <Toolbar>
         {isMobile && onMenuClick && (
           <IconButton

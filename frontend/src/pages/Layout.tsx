@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom';
-import { Container, useMediaQuery } from '@mui/material';
+import { Box, useMediaQuery } from '@mui/material';
 import type { Theme } from '@mui/material';
 import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
@@ -40,15 +40,15 @@ export default function Layout() {
   };
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <Header
         onMenuClick={() => setSidebarOpen(true)}
         isMobile={isMobile}
         onAdminClick={handleAdminClick}
       />
-      <Container sx={{ mt: 4 }}>
+      <Box component="main" sx={{ px: 3, pt: 4, flexGrow: 1, maxWidth: '67%', mx: 'auto', width: '100%', boxSizing: 'border-box' }}>
         <Outlet />
-      </Container>
+      </Box>
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <AdminToolsDialog open={adminDialogOpen} onClose={handleAdminClose} />
     </div>
