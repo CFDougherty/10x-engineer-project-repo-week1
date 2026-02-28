@@ -34,7 +34,9 @@ export default function PromptsPage() {
 
   const filteredPrompts = useMemo(() => {
     let result = prompts;
-    if (selectedCollection) {
+    if (selectedCollection === '__none__') {
+      result = result.filter(p => !p.collection_id);
+    } else if (selectedCollection) {
       result = result.filter(p => p.collection_id === selectedCollection);
     }
     if (searchQuery) {
@@ -160,6 +162,7 @@ export default function PromptsPage() {
                 }}
               >
                 <MenuItem value="">All Collections</MenuItem>
+                <MenuItem value="__none__">Not in any collection</MenuItem>
                 {collections.map((collection) => (
                   <MenuItem key={collection.id} value={collection.id}>
                     {collection.name}
