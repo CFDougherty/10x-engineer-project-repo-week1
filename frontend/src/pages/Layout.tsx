@@ -46,7 +46,7 @@ export default function Layout() {
         isMobile={isMobile}
         onAdminClick={handleAdminClick}
       />
-      <Box component="main" sx={{ px: 3, pt: 4, flexGrow: 1, maxWidth: '67%', mx: 'auto', width: '100%', boxSizing: 'border-box' }}>
+      <Box component="main" sx={{ px: { xs: 2, md: 3 }, pt: 4, flexGrow: 1, maxWidth: { xs: '100%', md: '67%' }, mx: 'auto', width: '100%', boxSizing: 'border-box' }}>
         <Outlet />
       </Box>
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />

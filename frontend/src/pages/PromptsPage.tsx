@@ -119,10 +119,10 @@ export default function PromptsPage() {
 
   return (
     <div>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
+      <Box display="flex" flexDirection={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'center' }} mb={4} gap={2}>
         <Box sx={{ flexGrow: 1 }}>
           <Typography variant="h4" gutterBottom>Prompts</Typography>
-          <Box display="flex" alignItems="center" gap={2} mb={2}>
+          <Box display="flex" alignItems="center" gap={2} mb={2} flexWrap="wrap">
             <SearchBar
               value={searchQuery}
               onChange={setSearchQuery}
@@ -133,7 +133,7 @@ export default function PromptsPage() {
               loading={searchLoading}
               sx={{ flexGrow: 1 }}
             />
-            <FormControl sx={{ minWidth: 200 }}>
+            <FormControl sx={{ minWidth: { xs: '100%', sm: 200 } }}>
               <InputLabel>Filter by Collection</InputLabel>
               <Select
                 value={selectedCollection}
@@ -174,7 +174,7 @@ export default function PromptsPage() {
           color="primary"
           startIcon={<AddIcon />}
           onClick={handleOpen}
-          sx={{ ml: 2 }}
+          sx={{ ml: { xs: 0, sm: 2 }, alignSelf: { xs: 'flex-start', sm: 'center' }, flexShrink: 0 }}
         >
           New Prompt
         </Button>
