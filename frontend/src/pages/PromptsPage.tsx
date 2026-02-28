@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { usePrompts } from '../hooks/usePrompts';
+import { useState, useMemo } from 'react';
+import { usePrompts } from '../contexts/PromptsContext';
 import { useCollections } from '../contexts/CollectionsContext';
 import type { Prompt } from '../types/prompt';
 import {
@@ -30,39 +30,31 @@ export default function PromptsPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const { collections } = useCollections();
 
-  // Apply search and filter
-  useEffect(() => {
-    const params: any = {};
-    if (searchQuery) {
-      params.search = searchQuery;
-      params.filter = filter;
-    }
+  const filteredPrompts = useMemo(() => {
+    let result = prompts;
     if (selectedCollection) {
-      params.collectionId = selectedCollection;
+      result = result.filter(p => p.collection_id === selectedCollection);
     }
-    if (Object.keys(params).length > 0) {
-      refetch(params);
-    } else {
-      refetch();
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(p => {
+        if (filter === 'title') return p.title.toLowerCase().includes(q);
+        if (filter === 'content') return p.content.toLowerCase().includes(q);
+        return (
+          p.title.toLowerCase().includes(q) ||
+          p.content.toLowerCase().includes(q) ||
+          p.description?.toLowerCase().includes(q) ||
+          p.tags?.some((t: string) => t.toLowerCase().includes(q))
+        );
+      });
     }
-  }, [filter, selectedCollection, refetch]);
+    return result;
+  }, [prompts, searchQuery, filter, selectedCollection]);
 
   const handleSearch = async () => {
     setSearchLoading(true);
     try {
-      const params: any = {};
-      if (searchQuery) {
-        params.search = searchQuery;
-        params.filter = filter;
-      }
-      if (selectedCollection) {
-        params.collectionId = selectedCollection;
-      }
-      if (Object.keys(params).length > 0) {
-        await refetch(params);
-      } else {
-        await refetch();
-      }
+      await refetch();
     } finally {
       setSearchLoading(false);
     }
@@ -202,11 +194,11 @@ export default function PromptsPage() {
         onSubmit={handleEditSubmit}
       />
 
-      {prompts.length === 0 ? (
+      {filteredPrompts.length === 0 ? (
         <Alert severity="info">No prompts found. Create your first prompt!</Alert>
       ) : (
         <Grid container spacing={3}>
-          {prompts.map((prompt) => (
+          {filteredPrompts.map((prompt) => (
             // @ts-expect-error - prompt type has missing properties
             <Grid item xs={12} sm={6} md={4} key={prompt.id} sx={{ display: 'flex' }}>
               <PromptCard

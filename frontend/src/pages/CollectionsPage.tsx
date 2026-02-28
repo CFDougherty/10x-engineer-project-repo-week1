@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCollections } from '../contexts/CollectionsContext';
-import { usePrompts } from '../hooks/usePrompts';
+import { usePrompts } from '../contexts/PromptsContext';
 import {
   Button,
   Card,

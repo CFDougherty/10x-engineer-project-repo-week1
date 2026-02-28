@@ -575,25 +575,13 @@ def delete_collection(collection_id: str):
 
 # ============== SSE Endpoint ==============
 
-# Store active SSE connections and their message queues
-from collections import defaultdict, deque
-sse_connections = defaultdict(list)
+# One asyncio.Queue per connected client
+sse_client_queues: list[asyncio.Queue] = []
 
 async def notify_sse_clients(message: str):
     """Notify all SSE clients about data changes."""
-    import asyncio
-    tasks = []
-    for connection in sse_connections["clients"]:
-        try:
-            # Create SSE message
-            sse_message = f"data: {message}\n\n"
-            await connection.write(sse_message)
-            await connection.drain()
-        except Exception as e:
-            # Remove disconnected clients
-            if connection in sse_connections["clients"]:
-                sse_connections["clients"].remove(connection)
-    await asyncio.gather(*tasks, return_exceptions=True)
+    for queue in sse_client_queues:
+        await queue.put(message)
 
 @app.get("/admin/events")
 async def sse_endpoint(request: Request):
@@ -605,27 +593,25 @@ async def sse_endpoint(request: Request):
     Returns:
         StreamingResponse: SSE stream that sends data change events.
     """
+    queue: asyncio.Queue = asyncio.Queue()
+    sse_client_queues.append(queue)
+
     async def event_stream():
-        # Send initial connection confirmation
         yield 'data: {"event": "connected", "message": "Connected to SSE stream"}\n\n'
+        try:
+            while True:
+                try:
+                    message = await asyncio.wait_for(queue.get(), timeout=15)
+                    yield f'data: {message}\n\n'
+                except asyncio.TimeoutError:
+                    yield ': keep-alive\n\n'
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if queue in sse_client_queues:
+                sse_client_queues.remove(queue)
 
-        # Keep connection open indefinitely
-        while True:
-            try:
-                # Send keep-alive every 15 seconds
-                await asyncio.sleep(15)
-                yield ': keep-alive\n\n'
-
-            except asyncio.CancelledError:
-                # Connection was closed by client
-                raise
-            except Exception as e:
-                # Log error and continue
-                print(f"SSE stream error: {e}")
-                await asyncio.sleep(1)
-                yield ': keep-alive\n\n'
-
-    response = StreamingResponse(
+    return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
         headers={
@@ -635,18 +621,6 @@ async def sse_endpoint(request: Request):
             "Access-Control-Allow-Headers": "cache-control",
         }
     )
-
-    # Register client connection after creating the response
-    sse_connections["clients"].append(response)
-
-    # Clean up on disconnection
-    async def cleanup():
-        if response in sse_connections["clients"]:
-            sse_connections["clients"].remove(response)
-
-    response.on_disconnect = cleanup
-
-    return response
 
 # ============== Admin Endpoints ==============
 

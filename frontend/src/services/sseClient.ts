@@ -78,11 +78,12 @@ const reconnect = () => {
   );
 
   console.log(`Attempting to reconnect (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}) in ${delay}ms...`);
+  const savedCallback = onDataChangeCallback;
   disconnectSSE();
 
   setTimeout(() => {
-    if (onDataChangeCallback) {
-      connectSSE(onDataChangeCallback);
+    if (savedCallback) {
+      connectSSE(savedCallback);
     }
   }, delay);
 };

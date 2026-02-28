@@ -6,7 +6,7 @@ import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import AdminToolsDialog from '../components/AdminToolsDialog';
 import { connectSSE, disconnectSSE } from '../services/sseClient';
-import { usePrompts } from '../hooks/usePrompts';
+import { usePrompts } from '../contexts/PromptsContext';
 import { useCollections } from '../contexts/CollectionsContext';
 
 export default function Layout() {

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, Box } from '@mui/material';
 import { populateTestData, clearAllData } from '../services/apiClient';
 import ConfirmationDialog from './ConfirmationDialog';
-import { usePrompts } from '../hooks/usePrompts';
+import { usePrompts } from '../contexts/PromptsContext';
 import { useCollections } from '../contexts/CollectionsContext';
 
 interface AdminToolsDialogProps {
