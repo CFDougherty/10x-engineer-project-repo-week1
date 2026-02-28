@@ -40,7 +40,7 @@ def filter_prompts_by_collection(prompts: List[Prompt], collection_id: str) -> L
     return [p for p in prompts if p.collection_id == collection_id]
 
 def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True, search_field: Optional[str] = None) -> List[Prompt]:
-    """Search prompts by title, content, description, and tags.
+    """Search prompts by title, content, description, tags, and collection.
 
     Uses fuzzysearch for real-time search with good performance.
 
@@ -48,7 +48,7 @@ def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True, search
         prompts: List of Prompt instances to search.
         query: Search text to look for within each prompt's fields.
         fuzzy: If True, uses fuzzy matching. If False, uses exact substring matching.
-        search_field: Optional field to search in ('all', 'title', 'description', 'tags', 'collection').
+        search_field: Optional field to search in ('all', 'title', 'content', 'description', 'tags', 'collection').
             If None (default), searches all fields.
 
     Returns:
@@ -74,7 +74,7 @@ def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True, search
     elif search_field == 'collection':
         fields_to_search = ['collection']
     else:  # 'all' or None - search all fields
-        fields_to_search = ['title', 'content', 'description', 'tags']
+        fields_to_search = ['title', 'content', 'description', 'tags', 'collection']
 
     if not fuzzy:
         # Exact substring matching

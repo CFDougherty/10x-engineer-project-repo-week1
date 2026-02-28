@@ -161,24 +161,8 @@ def list_prompts(
         # Default to 'all' if filter is not specified
         search_filter = filter if filter is not None else 'all'
 
-        if search_filter == 'all':
-            all_prompts = search_prompts(all_prompts, search, fuzzy=fuzzy, search_field='all')
-        elif search_filter == 'title':
-            all_prompts = [p for p in all_prompts if search.lower() in p.title.lower()]
-        elif search_filter == 'description':
-            all_prompts = [p for p in all_prompts if p.description and search.lower() in p.description.lower()]
-        elif search_filter == 'tags':
-            all_prompts = [p for p in all_prompts if p.tags and any(search.lower() in tag.lower() for tag in p.tags)]
-        elif search_filter == 'collection':
-            # Get all collections
-            all_collections = storage.get_all_collections()
-            # Filter prompts whose collection name matches
-            all_prompts = [
-                p for p in all_prompts
-                if p.collection_id and
-                any(c.id == p.collection_id and search.lower() in c.name.lower()
-                    for c in all_collections)
-            ]
+        # Use search_prompts for all filter types to ensure consistent behavior
+        all_prompts = search_prompts(all_prompts, search, fuzzy=fuzzy, search_field=search_filter)
 
     # Sort by date (newest first)
     all_prompts = sort_prompts_by_date(all_prompts, descending=True)
