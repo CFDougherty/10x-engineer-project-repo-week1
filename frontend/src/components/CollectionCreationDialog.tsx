@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -14,53 +14,78 @@ interface CollectionCreationDialogProps {
   open: boolean;
   onClose: () => void;
   onCollectionCreated?: (collectionId: string) => void;
+  mode?: 'create' | 'edit';
+  initialData?: { name: string; description?: string };
+  collectionId?: string;
+  onCollectionUpdated?: () => void;
 }
 
 export default function CollectionCreationDialog({
   open,
   onClose,
   onCollectionCreated,
+  mode = 'create',
+  initialData,
+  collectionId,
+  onCollectionUpdated,
 }: CollectionCreationDialogProps) {
-  const { create: createCollection, refetch } = useCollections();
+  const { create: createCollection, update: updateCollection, refetch } = useCollections();
   const [newCollectionName, setNewCollectionName] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
+  const [newCollectionDescription, setNewCollectionDescription] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setNewCollectionName(initialData?.name ?? '');
+      setNewCollectionDescription(initialData?.description ?? '');
+    }
+  }, [open, initialData]);
 
   const handleClose = () => {
     setNewCollectionName('');
-    setIsCreating(false);
+    setNewCollectionDescription('');
+    setIsSubmitting(false);
     onClose();
   };
 
-  const handleCreateNewCollection = async () => {
+  const handleSubmit = async () => {
     if (!newCollectionName.trim()) return;
 
-    setIsCreating(true);
+    setIsSubmitting(true);
     try {
-      const collectionData = {
-        name: newCollectionName.trim(),
-        description: '',
-      };
-      const newCollection = await createCollection(collectionData);
-      // Refresh collections to ensure all components get the updated list
-      await refetch();
-      if (onCollectionCreated) {
-        onCollectionCreated(newCollection.id);
+      if (mode === 'edit' && collectionId) {
+        await updateCollection(collectionId, {
+          name: newCollectionName.trim(),
+          description: newCollectionDescription.trim(),
+        });
+        onCollectionUpdated?.();
+        handleClose();
+      } else {
+        const collectionData = {
+          name: newCollectionName.trim(),
+          description: newCollectionDescription.trim(),
+        };
+        const newCollection = await createCollection(collectionData);
+        await refetch();
+        onCollectionCreated?.(newCollection.id);
+        handleClose();
       }
-      handleClose();
     } catch (err) {
-      console.error('Error creating collection:', err);
+      console.error('Error saving collection:', err);
     } finally {
-      setIsCreating(false);
+      setIsSubmitting(false);
     }
   };
+
+  const isEdit = mode === 'edit';
 
   return (
     <Dialog open={open} onClose={handleClose}>
       <form onSubmit={(e) => {
         e.preventDefault();
-        handleCreateNewCollection();
+        handleSubmit();
       }}>
-        <DialogTitle>Create New Collection</DialogTitle>
+        <DialogTitle>{isEdit ? 'Edit Collection' : 'Create New Collection'}</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
@@ -71,15 +96,24 @@ export default function CollectionCreationDialog({
             onChange={(e) => setNewCollectionName(e.target.value)}
             required
           />
+          <TextField
+            margin="dense"
+            label="Description"
+            fullWidth
+            multiline
+            rows={4}
+            value={newCollectionDescription}
+            onChange={(e) => setNewCollectionDescription(e.target.value)}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose}>Cancel</Button>
           <Button
             type="submit"
             variant="contained"
-            disabled={isCreating || !newCollectionName.trim()}
+            disabled={isSubmitting || !newCollectionName.trim()}
           >
-            {isCreating ? <CircularProgress size={24} /> : 'Create'}
+            {isSubmitting ? <CircularProgress size={24} /> : isEdit ? 'Save' : 'Create'}
           </Button>
         </DialogActions>
       </form>

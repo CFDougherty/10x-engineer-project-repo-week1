@@ -4,79 +4,71 @@ import { useCollections } from '../contexts/CollectionsContext';
 import { usePrompts } from '../contexts/PromptsContext';
 import {
   Button,
-  Card,
-  CardContent,
   Typography,
   CircularProgress,
   Alert,
-  TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Box,
-  IconButton
+  Box
 } from '@mui/material';
 import { Grid } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Add as AddIcon } from '@mui/icons-material';
 import ConfirmationDialog from '../components/ConfirmationDialog';
-import PromptCard from '../components/PromptCard';
 import VersionHistoryDialog from '../components/VersionHistoryDialog';
+import CollectionCard from '../components/CollectionCard';
+import CollectionCreationDialog from '../components/CollectionCreationDialog';
+import CollectionPromptsDialog from '../components/CollectionPromptsDialog';
+import type { Collection } from '../types/collection';
 
 export default function CollectionsPage() {
   const navigate = useNavigate();
-  const { collections, loading, error, create, remove } = useCollections();
+  const { collections, loading, error, remove, refetch } = useCollections();
   const { prompts: allPrompts, refetch: refetchPrompts, remove: removePrompt } = usePrompts();
-  const [open, setOpen] = useState(false);
-  const [viewingCollectionId, setViewingCollectionId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-  });
+
+  // Create dialog
+  const [createOpen, setCreateOpen] = useState(false);
+
+  // Edit dialog
+  const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+
+  // Collection delete confirmation
+  const [collectionToDelete, setCollectionToDelete] = useState<string | null>(null);
+  const [collectionDeleteDialogOpen, setCollectionDeleteDialogOpen] = useState(false);
+
+  // View prompts dialog
+  const [viewPromptsCollectionId, setViewPromptsCollectionId] = useState<string | null>(null);
+  const [viewPromptsDialogOpen, setViewPromptsDialogOpen] = useState(false);
+
+  // Prompt actions
   const [promptToDelete, setPromptToDelete] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [historyPromptId, setHistoryPromptId] = useState<string | null>(null);
 
-  // Get prompts for the currently viewed collection
-  const collectionPrompts = viewingCollectionId
-    ? allPrompts.filter(prompt => prompt.collection_id === viewingCollectionId)
-    : [];
-
-  const handleOpen = () => {
-    setFormData({ name: '', description: '' });
-    setOpen(true);
+  const handleCollectionEdit = (id: string) => {
+    const collection = collections.find(c => c.id === id) ?? null;
+    setEditingCollection(collection);
+    setEditDialogOpen(true);
   };
 
-  const handleClose = () => {
-    setOpen(false);
+  const handleCollectionDeleteRequest = (id: string) => {
+    setCollectionToDelete(id);
+    setCollectionDeleteDialogOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const confirmDeleteCollection = async () => {
+    if (!collectionToDelete) return;
     try {
-      const collectionData = {
-        name: formData.name,
-        description: formData.description,
-      };
-      await create(collectionData);
-      handleClose();
-    } catch (err) {
-      console.error('Error creating collection:', err);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      await remove(id);
-      // Reset the viewing state if the deleted collection was being viewed
-      if (viewingCollectionId === id) {
-        setViewingCollectionId(null);
-      }
-      // Refetch prompts to ensure they're in sync with collections
+      await remove(collectionToDelete);
       await refetchPrompts();
+      setCollectionDeleteDialogOpen(false);
+      setCollectionToDelete(null);
     } catch (err) {
       console.error('Error deleting collection:', err);
     }
+  };
+
+  const handleViewPrompts = (id: string) => {
+    setViewPromptsCollectionId(id);
+    setViewPromptsDialogOpen(true);
   };
 
   const handlePromptEdit = (promptId: string) => {
@@ -119,7 +111,7 @@ export default function CollectionsPage() {
           variant="contained"
           color="primary"
           startIcon={<AddIcon />}
-          onClick={handleOpen}
+          onClick={() => setCreateOpen(true)}
         >
           New Collection
         </Button>
@@ -132,114 +124,55 @@ export default function CollectionsPage() {
           {collections.map((collection) => (
             // @ts-expect-error - collection type has missing properties
             <Grid key={collection.id} item xs={12} sm={6} md={4} sx={{ display: 'flex' }}>
-              <Card sx={{ cursor: 'pointer', '&:hover': { boxShadow: 3 }, width: 350, overflow: 'hidden' }}>
-                <CardContent>
-                  <Typography variant="h5" component="div">
-                    {collection.name}
-                  </Typography>
-                  {collection.description && (
-                    <Typography sx={{ mb: 1.5 }} color="text.secondary">
-                      {collection.description}
-                    </Typography>
-                  )}
-                  <Box sx={{ mb: 1.5, display: 'flex', flexDirection: 'column' }}>
-                    <Typography variant="caption" color="text.secondary">Created</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {new Date(collection.created_at).toLocaleDateString()}
-                    </Typography>
-                  </Box>
-                  <Typography variant="body2">
-                    {allPrompts.filter(prompt => prompt.collection_id === collection.id).length} prompts
-                  </Typography>
-                </CardContent>
-                <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between' }}>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={() => setViewingCollectionId(collection.id)}
-                  >
-                    View Prompts
-                  </Button>
-                  <IconButton onClick={() => handleDelete(collection.id)} aria-label="delete">
-                    <DeleteIcon />
-                  </IconButton>
-                </Box>
-              </Card>
+              <CollectionCard
+                collection={collection}
+                promptCount={allPrompts.filter(p => p.collection_id === collection.id).length}
+                onEdit={handleCollectionEdit}
+                onDelete={handleCollectionDeleteRequest}
+                onViewPrompts={handleViewPrompts}
+              />
             </Grid>
           ))}
         </Grid>
       )}
 
-      {/* View Prompts in Collection */}
-      {viewingCollectionId && (
-        <Box mt={4}>
-          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-            <Typography variant="h5">
-              Prompts in {collections.find(c => c.id === viewingCollectionId)?.name}
-            </Typography>
-            <Button
-              variant="outlined"
-              onClick={() => setViewingCollectionId(null)}
-            >
-              Back to Collections
-            </Button>
-          </Box>
+      {/* Create Collection */}
+      <CollectionCreationDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+      />
 
-          {collectionPrompts.length === 0 ? (
-            <Alert severity="info">No prompts in this collection. Create one!</Alert>
-          ) : (
-            <Grid container spacing={3}>
-              {collectionPrompts.map((prompt) => (
-                // @ts-expect-error - prompt type has missing properties
-                <Grid item xs={12} sm={6} md={4} key={prompt.id}>
-                  <PromptCard
-                    prompt={prompt}
-                    collectionName={collections.find(c => c.id === viewingCollectionId)?.name}
-                    onEdit={handlePromptEdit}
-                    onDelete={handlePromptDelete}
-                    onViewHistory={(id) => setHistoryPromptId(id)}
-                  />
-                </Grid>
-              ))}
-            </Grid>
-          )}
-        </Box>
-      )}
+      {/* Edit Collection */}
+      <CollectionCreationDialog
+        open={editDialogOpen}
+        onClose={() => { setEditDialogOpen(false); setEditingCollection(null); }}
+        mode="edit"
+        initialData={editingCollection ? { name: editingCollection.name, description: editingCollection.description } : undefined}
+        collectionId={editingCollection?.id}
+        onCollectionUpdated={() => { refetch(); setEditDialogOpen(false); setEditingCollection(null); }}
+      />
 
+      {/* View Prompts */}
+      <CollectionPromptsDialog
+        open={viewPromptsDialogOpen}
+        onClose={() => { setViewPromptsDialogOpen(false); setViewPromptsCollectionId(null); }}
+        collectionId={viewPromptsCollectionId}
+        onPromptEdit={handlePromptEdit}
+        onPromptDelete={handlePromptDelete}
+        onPromptViewHistory={(id) => setHistoryPromptId(id)}
+      />
 
-      {/* Create Collection Dialog */}
-      <Dialog open={open} onClose={handleClose}>
-        <form onSubmit={handleSubmit}>
-          <DialogTitle>Create New Collection</DialogTitle>
-          <DialogContent>
-            <TextField
-              autoFocus
-              margin="dense"
-              label="Name"
-              fullWidth
-              value={formData.name}
-              onChange={(e) => setFormData({...formData, name: e.target.value})}
-              required
-            />
-            <TextField
-              margin="dense"
-              label="Description"
-              fullWidth
-              multiline
-              rows={4}
-              value={formData.description}
-              onChange={(e) => setFormData({...formData, description: e.target.value})}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleClose}>Cancel</Button>
-            <Button type="submit" variant="contained">
-              Create
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
+      {/* Delete Collection Confirmation */}
+      <ConfirmationDialog
+        open={collectionDeleteDialogOpen}
+        onClose={() => setCollectionDeleteDialogOpen(false)}
+        onConfirm={confirmDeleteCollection}
+        title="Delete Collection"
+        message="Are you sure you want to delete this collection? This action cannot be undone."
+        confirmText="Delete"
+      />
 
+      {/* Delete Prompt Confirmation */}
       <ConfirmationDialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
@@ -249,10 +182,12 @@ export default function CollectionsPage() {
         confirmText="Delete"
       />
 
+      {/* Version History */}
       <VersionHistoryDialog
         open={historyPromptId !== null}
         onClose={() => setHistoryPromptId(null)}
         promptId={historyPromptId ?? ''}
+        onRestored={refetchPrompts}
       />
     </div>
   );
