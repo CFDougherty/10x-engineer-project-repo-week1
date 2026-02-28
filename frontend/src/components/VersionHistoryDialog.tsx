@@ -22,7 +22,7 @@ import {
 } from '@mui/material';
 import { formatDateTime } from '../utils/dateUtils';
 import type { VersionList, VersionSummary, PromptVersion } from '../types/prompt';
-import { getPromptVersions, getPromptVersion, promotePromptVersion } from '../services/apiClient';
+import { getPromptVersions, getPromptVersion, promotePromptVersion, updatePrompt } from '../services/apiClient';
 import { Restore as RestoreIcon } from '@mui/icons-material';
 import ConfirmationDialog from './ConfirmationDialog';
 
@@ -42,6 +42,9 @@ export default function VersionHistoryDialog({ open, onClose, promptId, onRestor
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [editedTitle, setEditedTitle] = useState('');
+  const [editedContent, setEditedContent] = useState('');
+  const [editedDescription, setEditedDescription] = useState('');
 
   useEffect(() => {
     if (open && promptId) {
@@ -67,7 +70,11 @@ export default function VersionHistoryDialog({ open, onClose, promptId, onRestor
   const handleVersionClick = async (version: VersionSummary) => {
     try {
       const response = await getPromptVersion(promptId, version.version);
-      setSelectedVersion(response.data);
+      const v: PromptVersion = response.data;
+      setSelectedVersion(v);
+      setEditedTitle(v.title);
+      setEditedContent(v.content);
+      setEditedDescription(v.description ?? '');
       setVersionDetailsOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch version details');
@@ -75,16 +82,31 @@ export default function VersionHistoryDialog({ open, onClose, promptId, onRestor
     }
   };
 
+  const hasEdits = selectedVersion
+    ? editedTitle !== selectedVersion.title ||
+      editedContent !== selectedVersion.content ||
+      editedDescription !== (selectedVersion.description ?? '')
+    : false;
+
   const handleRestore = async () => {
     if (!selectedVersion) return;
 
     try {
       setRestoreLoading(true);
       setRestoreError(null);
-      await promotePromptVersion(promptId, selectedVersion.version);
+      if (hasEdits) {
+        await updatePrompt(promptId, {
+          title: editedTitle,
+          content: editedContent,
+          description: editedDescription || undefined,
+          tags: selectedVersion.tags,
+          collection_id: selectedVersion.collection_id,
+        });
+      } else {
+        await promotePromptVersion(promptId, selectedVersion.version);
+      }
       onRestored?.();
       await fetchVersions();
-      // Show success message
       setRestoreDialogOpen(false);
       setVersionDetailsOpen(false);
       setError(null);
@@ -160,12 +182,15 @@ export default function VersionHistoryDialog({ open, onClose, promptId, onRestor
         <DialogContent>
           {selectedVersion && (
             <>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                Edit the fields below to restore with modifications. Previous versions remain immutable.
+              </Typography>
               <TextField
                 fullWidth
                 margin="normal"
                 label="Title"
-                value={selectedVersion.title}
-                InputProps={{ readOnly: true }}
+                value={editedTitle}
+                onChange={(e) => setEditedTitle(e.target.value)}
               />
               <TextField
                 fullWidth
@@ -173,18 +198,16 @@ export default function VersionHistoryDialog({ open, onClose, promptId, onRestor
                 label="Content"
                 multiline
                 rows={8}
-                value={selectedVersion.content}
-                InputProps={{ readOnly: true }}
+                value={editedContent}
+                onChange={(e) => setEditedContent(e.target.value)}
               />
-              {selectedVersion.description && (
-                <TextField
-                  fullWidth
-                  margin="normal"
-                  label="Description"
-                  value={selectedVersion.description}
-                  InputProps={{ readOnly: true }}
-                />
-              )}
+              <TextField
+                fullWidth
+                margin="normal"
+                label="Description"
+                value={editedDescription}
+                onChange={(e) => setEditedDescription(e.target.value)}
+              />
               {selectedVersion.tags && selectedVersion.tags.length > 0 && (
                 <Box sx={{ mb: 2, mt: 1 }}>
                   <Typography variant="subtitle2" gutterBottom>
@@ -220,7 +243,7 @@ export default function VersionHistoryDialog({ open, onClose, promptId, onRestor
             variant="contained"
             onClick={() => setRestoreDialogOpen(true)}
           >
-            Restore This Version
+            {hasEdits ? 'Restore with Edits' : 'Restore This Version'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -231,7 +254,10 @@ export default function VersionHistoryDialog({ open, onClose, promptId, onRestor
         onClose={() => setRestoreDialogOpen(false)}
         onConfirm={handleRestore}
         title="Restore Version"
-        message={`Are you sure you want to restore version ${selectedVersion?.version}? This will create a new version based on this old version.`}
+        message={hasEdits
+          ? `Are you sure you want to restore version ${selectedVersion?.version} with your edits? This will create a new version with your modifications.`
+          : `Are you sure you want to restore version ${selectedVersion?.version}? This will create a new version based on this old version.`
+        }
         confirmText="Restore"
         loading={restoreLoading}
         error={restoreError}
