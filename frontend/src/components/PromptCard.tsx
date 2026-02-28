@@ -123,6 +123,17 @@ export default function PromptCard({ prompt, collectionName, onEdit, onDelete, o
           </Box>
         </DialogContent>
         <DialogActions>
+          <Box sx={{ flex: 1, display: 'flex', gap: 1 }}>
+            <IconButton size="small" onClick={() => { setOpen(false); onEdit(prompt.id); }}>
+              <EditIcon fontSize="small" />
+            </IconButton>
+            <IconButton size="small" onClick={() => { setOpen(false); onViewHistory(prompt.id); }}>
+              <HistoryIcon fontSize="small" />
+            </IconButton>
+            <IconButton size="small" onClick={() => { setOpen(false); onDelete(prompt.id); }}>
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Box>
           <Button onClick={() => setOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
