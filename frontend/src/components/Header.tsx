@@ -30,13 +30,13 @@ export default function Header({ onMenuClick, isMobile = false, onAdminClick }: 
         </Typography>
         {!isMobile && (
           <>
-            <Button color="inherit" component={Link} to="/">
+            <Button color="inherit" component={Link} to="/" sx={{ '&:hover': { color: 'inherit', backgroundColor: 'rgba(0, 0, 0, 0.2)' } }}>
               Prompts
             </Button>
-            <Button color="inherit" component={Link} to="/collections">
+            <Button color="inherit" component={Link} to="/collections" sx={{ '&:hover': { color: 'inherit', backgroundColor: 'rgba(0, 0, 0, 0.2)' } }}>
               Collections
             </Button>
-            <Button color="inherit" href={`${API_BASE_URL}/docs#/`} target="_blank" rel="noopener noreferrer">
+            <Button color="inherit" href={`${API_BASE_URL}/docs#/`} target="_blank" rel="noopener noreferrer" sx={{ '&:hover': { color: 'inherit', backgroundColor: 'rgba(0, 0, 0, 0.2)' } }}>
               Docs
             </Button>
           </>
