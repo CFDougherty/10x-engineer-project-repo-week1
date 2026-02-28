@@ -21,7 +21,8 @@ class TestSortPromptsByDate:
 
     def test_sort_prompts_descending(self):
         """Test sorting prompts in descending order (newest first)."""
-        now = datetime.utcnow()
+        from datetime import timezone
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompts = [
             Prompt(title="Oldest", content="content", created_at=now - timedelta(days=3)),
             Prompt(title="Middle", content="content", created_at=now - timedelta(days=1)),
@@ -36,7 +37,8 @@ class TestSortPromptsByDate:
 
     def test_sort_prompts_ascending(self):
         """Test sorting prompts in ascending order (oldest first)."""
-        now = datetime.utcnow()
+        from datetime import timezone
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompts = [
             Prompt(title="Oldest", content="content", created_at=now - timedelta(days=3)),
             Prompt(title="Middle", content="content", created_at=now - timedelta(days=1)),
@@ -56,14 +58,16 @@ class TestSortPromptsByDate:
 
     def test_sort_single_prompt(self):
         """Test sorting a single prompt."""
-        now = datetime.utcnow()
+        from datetime import timezone
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompt = Prompt(title="Single", content="content", created_at=now)
         sorted_prompts = sort_prompts_by_date([prompt], descending=True)
         assert sorted_prompts == [prompt]
 
     def test_sort_prompts_with_same_timestamp(self):
         """Test sorting prompts with identical timestamps."""
-        now = datetime.utcnow()
+        from datetime import timezone
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompts = [
             Prompt(title="First", content="content", created_at=now),
             Prompt(title="Second", content="content", created_at=now),
@@ -76,7 +80,8 @@ class TestSortPromptsByDate:
 
     def test_sort_prompts_with_none_created_at(self):
         """Test sorting prompts when some have None created_at values."""
-        now = datetime.utcnow()
+        from datetime import timezone
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         # Pydantic model doesn't allow None for created_at, so we test with valid dates
         # but create a scenario that would cause issues if None were allowed
         prompts = [
@@ -92,7 +97,8 @@ class TestSortPromptsByDate:
 
     def test_sort_prompts_default_descending(self):
         """Test that the default sort order is descending."""
-        now = datetime.utcnow()
+        from datetime import timezone
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompts = [
             Prompt(title="Oldest", content="content", created_at=now - timedelta(days=3)),
             Prompt(title="Newest", content="content", created_at=now),
@@ -105,7 +111,8 @@ class TestSortPromptsByDate:
 
     def test_sort_prompts_large_list(self):
         """Test sorting with a large number of prompts."""
-        now = datetime.utcnow()
+        from datetime import timezone
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompts = [
             Prompt(title=f"Prompt {i}", content="content", created_at=now - timedelta(days=i))
             for i in range(1000)
@@ -116,7 +123,8 @@ class TestSortPromptsByDate:
 
     def test_sort_with_identical_timestamps_different_objects(self):
         """Test sorting when timestamps are identical but objects are different."""
-        now = datetime.utcnow()
+        from datetime import timezone
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompt1 = Prompt(title="First", content="content1", created_at=now)
         prompt2 = Prompt(title="Second", content="content2", created_at=now)
 
@@ -689,7 +697,8 @@ class TestIntegration:
 
     def test_integration_sort_filter_search(self):
         """Test integration of sort, filter, and search functions."""
-        now = datetime.utcnow()
+        from datetime import timezone
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompts = [
             Prompt(title="Python tutorial", content="content", created_at=now - timedelta(days=3), collection_id="col1", description="Python programming"),
             Prompt(title="JavaScript guide", content="content", created_at=now - timedelta(days=1), collection_id="col2", description="JavaScript programming"),

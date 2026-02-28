@@ -16,7 +16,7 @@ class TestDetailedErrorCases:
 
     def test_malformed_json(self, client: TestClient):
         """Test with malformed JSON payload"""
-        response = client.post("/prompts", data='{"title": "Test", "content": "Test"', headers={"Content-Type": "application/json"})
+        response = client.post("/prompts", content="{title: Test}", headers={"Content-Type": "application/json"})
         assert response.status_code == 400  # Malformed JSON returns 400
 
     def test_sql_injection_attempt(self, client: TestClient):

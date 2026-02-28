@@ -69,11 +69,12 @@ class TestVersioningModels:
 
     def test_prompt_meta_model_exists(self):
         """Verify that PromptMeta model can be imported and instantiated."""
+        from datetime import timezone
         from app.models import PromptMeta
         meta = PromptMeta(
             id="test-id",
             current_version=1,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None)
         )
         assert meta.id == "test-id"
         assert meta.current_version == 1

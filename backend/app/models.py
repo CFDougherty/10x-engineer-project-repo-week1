@@ -37,7 +37,8 @@ def get_current_time() -> datetime:
     Returns:
         datetime: The current time in UTC (naive).
     """
-    return datetime.utcnow()
+    from datetime import timezone
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 # ============== Prompt Models ==============
 class PromptUpdateOptional(BaseModel):
@@ -265,8 +266,7 @@ class Prompt(PromptBase):
 
         return super().model_copy(update=copy_data, deep=deep)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # ============== Collection Models ==============
 
@@ -358,8 +358,7 @@ class Collection(CollectionBase):
                 self.name == other.name and
                 self.description == other.description)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # ============== Versioning Models ==============
 
@@ -390,8 +389,7 @@ class PromptVersion(BaseModel):
     tags: Optional[List[str]] = None
     created_at: datetime = Field(default_factory=get_current_time)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class PromptMeta(BaseModel):
     """Metadata for a prompt's version history.
@@ -410,8 +408,7 @@ class PromptMeta(BaseModel):
     current_version: int
     created_at: datetime = Field(default_factory=get_current_time)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class VersionSummary(BaseModel):
     """Summary information for a prompt version.

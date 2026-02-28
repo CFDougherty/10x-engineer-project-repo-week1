@@ -608,12 +608,12 @@ class TestPrompts:
 
     def test_create_prompt_with_invalid_json(self, client: TestClient):
         """Test creating a prompt with invalid JSON."""
-        response = client.post("/prompts", data="invalid json", headers={"Content-Type": "application/json"})
+        response = client.post("/prompts", content="invalid json", headers={"Content-Type": "application/json"})
         assert response.status_code == 400
 
     def test_create_prompt_with_wrong_content_type(self, client: TestClient):
         """Test creating a prompt with wrong content type."""
-        response = client.post("/prompts", data='{"title": "Test", "content": "Test"}', headers={"Content-Type": "text/plain"})
+        response = client.post("/prompts", content='{"title": "Test", "content": "Test"}', headers={"Content-Type": "text/plain"})
         assert response.status_code == 415
 
     def test_list_prompts_with_invalid_sort_field(self, client: TestClient):

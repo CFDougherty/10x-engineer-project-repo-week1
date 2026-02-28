@@ -97,9 +97,10 @@ class TestPromptAndCollectionDefaults:
 
     def test_prompt_generates_id_and_timestamps(self):
         """Prompt should generate a UUID and timestamps when not provided."""
-        before = datetime.utcnow()
+        from datetime import timezone
+        before = datetime.now(timezone.utc).replace(tzinfo=None)
         prompt = Prompt(title="Default Test", content="Default content")
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc).replace(tzinfo=None)
 
         uuid_obj = UUID(prompt.id)
         assert isinstance(uuid_obj, UUID)
