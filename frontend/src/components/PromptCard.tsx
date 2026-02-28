@@ -10,7 +10,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Button
+  Button,
+  Divider
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, History as HistoryIcon } from '@mui/icons-material';
 import { formatDateTime } from '../utils/dateUtils';
@@ -25,12 +26,13 @@ interface PromptCardProps {
     created_at: string;
     updated_at: string;
   };
+  collectionName?: string;
   onEdit: (promptId: string) => void;
   onDelete: (promptId: string) => void;
   onViewHistory: (promptId: string) => void;
 }
 
-export default function PromptCard({ prompt, onEdit, onDelete, onViewHistory }: PromptCardProps) {
+export default function PromptCard({ prompt, collectionName, onEdit, onDelete, onViewHistory }: PromptCardProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -78,21 +80,38 @@ export default function PromptCard({ prompt, onEdit, onDelete, onViewHistory }: 
         <DialogTitle>{prompt.title}</DialogTitle>
         <DialogContent dividers>
           {prompt.description && (
-            <Typography variant="body2" paragraph sx={{ mb: 2, wordBreak: 'break-word' }}>
-              <strong>Description:</strong> {prompt.description}
-            </Typography>
-          )}
-          <Typography variant="body1" paragraph sx={{ mb: 2, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
-            {prompt.content}
-          </Typography>
-          {prompt.tags && prompt.tags.length > 0 && (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-              {prompt.tags.map((tag: string) => (
-                <Chip key={tag} label={tag} size="small" />
-              ))}
+            <Box sx={{ mb: 2 }}>
+              <Divider sx={{ mb: 1 }}>Description</Divider>
+              <Typography variant="body2" sx={{ wordBreak: 'break-word', mt: 1 }}>
+                {prompt.description}
+              </Typography>
             </Box>
           )}
-          <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Box sx={{ mb: 2 }}>
+            <Divider sx={{ mb: 1 }}>Content</Divider>
+            <Typography variant="body1" sx={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', mt: 1 }}>
+              {prompt.content}
+            </Typography>
+          </Box>
+          {prompt.tags && prompt.tags.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Divider sx={{ mb: 1 }}>Tags</Divider>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                {prompt.tags.map((tag: string) => (
+                  <Chip key={tag} label={tag} size="small" />
+                ))}
+              </Box>
+            </Box>
+          )}
+          {collectionName && (
+            <Box sx={{ mb: 2 }}>
+              <Divider sx={{ mb: 1 }}>Collection</Divider>
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                {collectionName}
+              </Typography>
+            </Box>
+          )}
+          <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mt: 1 }}>
             <Typography variant="caption" color="text.secondary">
               Created: {formatDateTime(prompt.created_at)}
             </Typography>

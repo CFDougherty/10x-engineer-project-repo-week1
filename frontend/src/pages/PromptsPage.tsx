@@ -215,6 +215,7 @@ export default function PromptsPage() {
             <Grid item xs={12} sm={6} md={4} key={prompt.id} sx={{ display: 'flex' }}>
               <PromptCard
                 prompt={prompt}
+                collectionName={collections.find(c => c.id === prompt.collection_id)?.name}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onViewHistory={handleViewHistory}
