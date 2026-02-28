@@ -20,7 +20,7 @@ import Button from '../components/Button';
 import PromptCard from '../components/PromptCard';
 
 export default function PromptsPage() {
-  const { prompts, loading, error, update, remove, refetch } = usePrompts();
+  const { prompts, loading, error, create, update, remove, refetch } = usePrompts();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null);
@@ -179,8 +179,8 @@ export default function PromptsPage() {
         open={createDialogOpen}
         onClose={() => setCreateDialogOpen(false)}
         mode="create"
-        onSubmit={async () => {
-          await refetch();
+        onSubmit={async (promptData) => {
+          await create(promptData);
         }}
         onPromptCreated={refetch}
       />
