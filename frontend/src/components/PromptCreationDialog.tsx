@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -9,23 +9,39 @@ import {
   MenuItem
 } from '@mui/material';
 import { useCollections } from '../contexts/CollectionsContext';
-import { usePrompts } from '../hooks/usePrompts';
 import CollectionCreationDialog from './CollectionCreationDialog';
 
-interface PromptCreationDialogProps {
+interface PromptFormDialogProps {
   open: boolean;
   onClose: () => void;
+  mode: 'create' | 'edit';
+  initialData?: {
+    title: string;
+    content: string;
+    description?: string;
+    tags?: string[];
+    collection_id?: string;
+  };
+  onSubmit: (promptData: {
+    title: string;
+    content: string;
+    description?: string;
+    tags: string[];
+    collection_id?: string;
+  }) => Promise<void>;
   initialCollectionId?: string;
   onPromptCreated?: () => void;
 }
 
-export default function PromptCreationDialog({
+export default function PromptFormDialog({
   open,
   onClose,
+  mode,
+  initialData,
+  onSubmit,
   initialCollectionId,
   onPromptCreated,
-}: PromptCreationDialogProps) {
-  const { create: createPrompt } = usePrompts();
+}: PromptFormDialogProps) {
   const { collections } = useCollections();
   const [formData, setFormData] = useState({
     title: '',
@@ -36,19 +52,35 @@ export default function PromptCreationDialog({
   });
   const [showCollectionDialog, setShowCollectionDialog] = useState(false);
 
+  // Reset form when dialog opens or mode/initialData changes
+  useEffect(() => {
+    if (open) {
+      if (mode === 'edit' && initialData) {
+        setFormData({
+          title: initialData.title || '',
+          content: initialData.content || '',
+          description: initialData.description || '',
+          tags: initialData.tags?.join(', ') || '',
+          collectionId: initialData.collection_id || '',
+        });
+      } else {
+        setFormData({
+          title: '',
+          content: '',
+          description: '',
+          tags: '',
+          collectionId: initialCollectionId || '',
+        });
+      }
+      setShowCollectionDialog(false);
+    }
+  }, [open, mode, initialData, initialCollectionId]);
+
   const handleClose = () => {
-    setFormData({
-      title: '',
-      content: '',
-      description: '',
-      tags: '',
-      collectionId: initialCollectionId || '',
-    });
-    setShowCollectionDialog(false);
     onClose();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const tagsArray = formData.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean);
@@ -60,7 +92,7 @@ export default function PromptCreationDialog({
         collection_id: formData.collectionId || undefined,
       };
 
-      await createPrompt(promptData);
+      await onSubmit(promptData);
       if (onPromptCreated) {
         onPromptCreated();
       }
@@ -79,8 +111,8 @@ export default function PromptCreationDialog({
     <>
       {/* Create/Edit Prompt Dialog */}
       <Dialog open={open} onClose={handleClose}>
-        <form onSubmit={handleSubmit}>
-          <DialogTitle>Create New Prompt</DialogTitle>
+        <form onSubmit={handleFormSubmit}>
+          <DialogTitle>{mode === 'create' ? 'Create New Prompt' : 'Edit Prompt'}</DialogTitle>
           <DialogContent>
             <TextField
               autoFocus
@@ -142,7 +174,7 @@ export default function PromptCreationDialog({
           <DialogActions>
             <Button onClick={handleClose}>Cancel</Button>
             <Button type="submit" variant="contained">
-              Create
+              {mode === 'create' ? 'Create' : 'Update'}
             </Button>
           </DialogActions>
         </form>

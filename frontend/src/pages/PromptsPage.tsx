@@ -6,11 +6,6 @@ import {
   Typography,
   CircularProgress,
   Alert,
-  TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Box,
   MenuItem,
   FormControl,
@@ -19,8 +14,7 @@ import {
 } from '@mui/material';
 import { Grid } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
-import PromptCreationDialog from '../components/PromptCreationDialog';
-import CollectionCreationDialog from '../components/CollectionCreationDialog';
+import PromptFormDialog from '../components/PromptCreationDialog';
 import SearchBar from '../components/SearchBar';
 import Button from '../components/Button';
 import PromptCard from '../components/PromptCard';
@@ -30,16 +24,9 @@ export default function PromptsPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null);
-  const [editFormData, setEditFormData] = useState({
-    title: '',
-    content: '',
-    tags: '',
-    collectionId: '',
-  });
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [selectedCollection, setSelectedCollection] = useState('');
-  const [showCollectionDialog, setShowCollectionDialog] = useState(false);
   const { collections } = useCollections();
 
   // Apply search and filter
@@ -67,12 +54,6 @@ export default function PromptsPage() {
     const prompt = prompts.find(p => p.id === promptId);
     if (prompt) {
       setEditingPrompt(prompt);
-      setEditFormData({
-        title: prompt.title,
-        content: prompt.content,
-        tags: prompt.tags?.join(', ') || '',
-        collectionId: prompt.collection_id || '',
-      });
       setEditDialogOpen(true);
     }
   };
@@ -81,19 +62,16 @@ export default function PromptsPage() {
     setEditDialogOpen(false);
   };
 
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleEditSubmit = async (promptData: {
+    title: string;
+    content: string;
+    description?: string;
+    tags: string[];
+    collection_id?: string;
+  }) => {
     if (!editingPrompt) return;
     try {
-      const tagsArray = editFormData.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean);
-      const promptData = {
-        title: editFormData.title,
-        content: editFormData.content,
-        tags: tagsArray,
-        collection_id: editFormData.collectionId || undefined,
-      };
       await update(editingPrompt.id, promptData);
-      handleCloseEdit();
     } catch (err) {
       console.error('Error saving prompt:', err);
     }
@@ -181,80 +159,23 @@ export default function PromptsPage() {
       </Box>
 
       {/* Prompt Creation Dialog */}
-      <PromptCreationDialog
+      <PromptFormDialog
         open={createDialogOpen}
         onClose={() => setCreateDialogOpen(false)}
+        mode="create"
+        onSubmit={async () => {
+          await refetch();
+        }}
         onPromptCreated={refetch}
       />
 
       {/* Edit Prompt Dialog */}
-      <Dialog open={editDialogOpen} onClose={handleCloseEdit}>
-        <form onSubmit={handleEditSubmit}>
-          <DialogTitle>Edit Prompt</DialogTitle>
-          <DialogContent>
-            <TextField
-              autoFocus
-              margin="dense"
-              label="Title"
-              fullWidth
-              value={editFormData.title}
-              onChange={(e) => setEditFormData({...editFormData, title: e.target.value})}
-              required
-            />
-            <TextField
-              margin="dense"
-              label="Content"
-              fullWidth
-              multiline
-              rows={4}
-              value={editFormData.content}
-              onChange={(e) => setEditFormData({...editFormData, content: e.target.value})}
-              required
-            />
-            <TextField
-              margin="dense"
-              label="Tags (comma separated)"
-              fullWidth
-              value={editFormData.tags}
-              onChange={(e) => setEditFormData({...editFormData, tags: e.target.value})}
-            />
-            <TextField
-              select
-              margin="dense"
-              label="Collection"
-              fullWidth
-              value={editFormData.collectionId}
-              onChange={(e) => setEditFormData({...editFormData, collectionId: e.target.value})}
-            >
-              <MenuItem value="">None (no collection)</MenuItem>
-              {collections.map((collection) => (
-                <MenuItem key={collection.id} value={collection.id}>
-                  {collection.name}
-                </MenuItem>
-              ))}
-              <MenuItem value="__create_new__" onClick={(e) => {
-                e.stopPropagation();
-                setShowCollectionDialog(true);
-              }}>
-                + Create new collection...
-              </MenuItem>
-            </TextField>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseEdit}>Cancel</Button>
-            <Button type="submit" variant="contained">
-              Update
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
-
-      <CollectionCreationDialog
-        open={showCollectionDialog}
-        onClose={() => setShowCollectionDialog(false)}
-        onCollectionCreated={(collectionId) => {
-          setEditFormData({...editFormData, collectionId});
-        }}
+      <PromptFormDialog
+        open={editDialogOpen}
+        onClose={handleCloseEdit}
+        mode="edit"
+        initialData={editingPrompt || undefined}
+        onSubmit={handleEditSubmit}
       />
 
       {prompts.length === 0 ? (
