@@ -30,9 +30,10 @@ interface VersionHistoryDialogProps {
   open: boolean;
   onClose: () => void;
   promptId: string;
+  onRestored?: () => void;
 }
 
-export default function VersionHistoryDialog({ open, onClose, promptId }: VersionHistoryDialogProps) {
+export default function VersionHistoryDialog({ open, onClose, promptId, onRestored }: VersionHistoryDialogProps) {
   const [versions, setVersions] = useState<VersionSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +82,7 @@ export default function VersionHistoryDialog({ open, onClose, promptId }: Versio
       setRestoreLoading(true);
       setRestoreError(null);
       await promotePromptVersion(promptId, selectedVersion.version);
+      onRestored?.();
       await fetchVersions();
       // Show success message
       setRestoreDialogOpen(false);

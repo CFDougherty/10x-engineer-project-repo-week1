@@ -204,6 +204,7 @@ export default function PromptsPage() {
         open={historyPromptId !== null}
         onClose={() => setHistoryPromptId(null)}
         promptId={historyPromptId ?? ''}
+        onRestored={refetch}
       />
 
       {filteredPrompts.length === 0 ? (

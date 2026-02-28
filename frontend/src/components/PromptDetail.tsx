@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getPromptById, updatePrompt, deletePrompt } from '../services/apiClient';
 import type { Prompt } from '../types/prompt';
@@ -42,40 +42,39 @@ export default function PromptDetail() {
   const [showCollectionDialog, setShowCollectionDialog] = useState(false);
   const { collections } = useCollections();
 
-  useEffect(() => {
+  const fetchPrompt = useCallback(async () => {
     if (!id) return;
-
-    const fetchPrompt = async () => {
-      try {
-        setLoading(true);
-        const response = await getPromptById(id);
-        setPrompt(response.data);
-        setEditData({
-          title: response.data.title,
-          content: response.data.content,
-          description: response.data.description || '',
-          tags: response.data.tags?.join(', ') || '',
-          collectionId: response.data.collection_id || '',
-        });
-        setError(null);
-      } catch (err) {
-        // Handle 404 specifically
-        if (axios.isAxiosError(err) && err.response && err.response.status === 404) {
-          setError('Prompt not found');
-        } else if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError('Failed to fetch prompt');
-        }
-        console.error('Error fetching prompt:', err);
-        setPrompt(null); // Ensure prompt is null on error
-      } finally {
-        setLoading(false);
+    try {
+      setLoading(true);
+      const response = await getPromptById(id);
+      setPrompt(response.data);
+      setEditData({
+        title: response.data.title,
+        content: response.data.content,
+        description: response.data.description || '',
+        tags: response.data.tags?.join(', ') || '',
+        collectionId: response.data.collection_id || '',
+      });
+      setError(null);
+    } catch (err) {
+      // Handle 404 specifically
+      if (axios.isAxiosError(err) && err.response && err.response.status === 404) {
+        setError('Prompt not found');
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Failed to fetch prompt');
       }
-    };
-
-    fetchPrompt();
+      console.error('Error fetching prompt:', err);
+      setPrompt(null); // Ensure prompt is null on error
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    fetchPrompt();
+  }, [fetchPrompt]);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -293,6 +292,7 @@ export default function PromptDetail() {
         open={versionHistoryOpen}
         onClose={() => setVersionHistoryOpen(false)}
         promptId={prompt?.id || ''}
+        onRestored={fetchPrompt}
       />
 
       <CollectionCreationDialog
