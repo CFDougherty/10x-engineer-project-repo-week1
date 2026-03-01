@@ -405,14 +405,16 @@ class Storage:
         # Create new version with incremented version number
         new_version_num = self._prompt_meta[prompt_id].current_version + 1
 
-        # Create new prompt from the old version
+        # Create new prompt from the old version, preserving original created_at
+        original_prompt = self.get_prompt(prompt_id)
         new_prompt = Prompt(
             id=prompt_id,
             title=old_version.title,
             content=old_version.content,
             description=old_version.description,
             collection_id=old_version.collection_id,
-            tags=old_version.tags
+            tags=old_version.tags,
+            created_at=original_prompt.created_at
         )
 
         # Create the new version

@@ -288,6 +288,7 @@ class Collection(CollectionBase):
 
     id: str = Field(default_factory=generate_id)
     created_at: datetime = Field(default_factory=get_current_time)
+    prompt_ids: List[str] = Field(default_factory=list)
 
     def __eq__(self, other):
         """Compare collections by their data, not by object identity."""
