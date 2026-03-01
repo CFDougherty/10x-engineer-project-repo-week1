@@ -40,7 +40,7 @@ class PromptDB(Base):
     )
     tags: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
     version: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # pgvector: nullable groundwork — no embedding generation yet
     embedding: Mapped[Optional[List[float]]] = mapped_column(Vector(1536), nullable=True)

@@ -20,7 +20,8 @@ from app.models_db import PromptDB, CollectionDB, PromptVersionDB, PromptMetaDB
 # ---------------------------------------------------------------------------
 
 def _to_prompt(row: PromptDB) -> Prompt:
-    return Prompt(
+    # Use model_construct to bypass __init__ sanitization — data from DB is already sanitized
+    return Prompt.model_construct(
         id=row.id,
         title=row.title,
         content=row.content,

@@ -164,7 +164,6 @@ class Prompt(PromptBase):
 
     def __init__(self, **data):
         """Initialize a Prompt instance and sanitize HTML content."""
-        # Sanitize HTML fields before setting them
         if 'title' in data and data['title'] is not None:
             data['title'] = sanitize_html(data['title'])
         if 'content' in data and data['content'] is not None:

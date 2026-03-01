@@ -256,12 +256,12 @@ async def create_prompt(prompt_data: PromptCreate):
             raise HTTPException(status_code=400, detail="Collection not found")
 
     prompt = Prompt(**prompt_data.model_dump())
-    created_prompt = await storage.create_prompt(prompt)
+    await storage.create_prompt(prompt)
 
-    # Create version 1
+    # Create version 1, then re-fetch to get the updated version field
     await storage.create_prompt_version(prompt.id, prompt)
 
-    return created_prompt
+    return await storage.get_prompt(prompt.id)
 
 
 @app.put("/prompts/{prompt_id}", response_model=Prompt)
@@ -310,9 +310,10 @@ async def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
 
     result = await storage.update_prompt(prompt_id, updated_prompt)
 
-    # Create new version
+    # Create new version, then re-fetch to get the updated version field
     if result:
         await storage.create_prompt_version(prompt_id, result)
+        result = await storage.get_prompt(prompt_id)
 
     return result
 
@@ -375,9 +376,10 @@ async def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(
 
     result = await storage.update_prompt(prompt_id, updated_prompt)
 
-    # Create new version if changes were made
+    # Create new version if changes were made, then re-fetch to get the updated version field
     if result:
         await storage.create_prompt_version(prompt_id, result)
+        result = await storage.get_prompt(prompt_id)
 
     return result
 
@@ -463,7 +465,8 @@ async def create_collection(collection_data: CollectionCreate):
             layer.
     """
     collection = Collection(**collection_data.model_dump())
-    return await storage.create_collection(collection)
+    result = await storage.create_collection(collection)
+    return await _get_collection_with_prompt_ids(result)
 
 
 @app.put("/collections/{collection_id}", response_model=Collection)
@@ -496,7 +499,7 @@ async def update_collection(collection_id: str, collection_data: CollectionCreat
     )
 
     result = await storage.update_collection(collection_id, updated_collection)
-    return result
+    return await _get_collection_with_prompt_ids(result)
 
 @app.patch("/collections/{collection_id}", response_model=Collection)
 async def patch_collection(collection_id: str, collection_data: CollectionUpdateOptional = Body(...)):
@@ -525,7 +528,7 @@ async def patch_collection(collection_id: str, collection_data: CollectionUpdate
     # Check for actual changes using model_dump(exclude_unset=True)
     updated_fields = collection_data.model_dump(exclude_unset=True)
     if not updated_fields:
-        return existing  # Return unchanged if no fields provided
+        return await _get_collection_with_prompt_ids(existing)
 
     # Update only the fields that are provided
     updated_collection = Collection(
@@ -536,7 +539,7 @@ async def patch_collection(collection_id: str, collection_data: CollectionUpdate
     )
 
     result = await storage.update_collection(collection_id, updated_collection)
-    return result
+    return await _get_collection_with_prompt_ids(result)
 
 @app.delete("/collections/{collection_id}", status_code=204)
 async def delete_collection(collection_id: str):

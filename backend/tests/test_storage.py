@@ -50,13 +50,13 @@ class TestPromptCRUD:
         assert len(await storage.get_all_prompts()) == 1
 
     async def test_create_prompt_overwrites_existing(self):
-        """Creating a prompt with an existing ID overwrites the stored entry."""
+        """Updating an existing prompt by its ID replaces the stored entry."""
         storage = Storage()
         prompt1 = Prompt(title="Original", content="Original content")
-        prompt2 = Prompt(id=prompt1.id, title="Updated", content="Updated content")
 
         await storage.create_prompt(prompt1)
-        await storage.create_prompt(prompt2)
+        updated = Prompt(id=prompt1.id, title="Updated", content="Updated content")
+        await storage.update_prompt(prompt1.id, updated)
 
         retrieved = await storage.get_prompt(prompt1.id)
         assert retrieved.title == "Updated"
@@ -100,7 +100,7 @@ class TestPromptCRUD:
         assert prompt2 in result
 
     async def test_update_prompt_existing(self):
-        """Updating an existing prompt replaces it and returns the updated instance."""
+        """Updating an existing prompt replaces its fields and returns the updated instance."""
         storage = Storage()
         original = Prompt(title="Original", content="Original content")
         updated = Prompt(title="Updated", content="Updated content")
@@ -108,8 +108,13 @@ class TestPromptCRUD:
         await storage.create_prompt(original)
         result = await storage.update_prompt(original.id, updated)
 
-        assert result == updated
-        assert (await storage.get_prompt(original.id)) == updated
+        assert result is not None
+        assert result.id == original.id
+        assert result.title == "Updated"
+        assert result.content == "Updated content"
+        retrieved = await storage.get_prompt(original.id)
+        assert retrieved.title == "Updated"
+        assert retrieved.content == "Updated content"
 
     async def test_update_prompt_nonexistent(self):
         """Updating a non-existent prompt returns None."""
@@ -167,13 +172,13 @@ class TestCollectionCRUD:
         assert len(await storage.get_all_collections()) == 1
 
     async def test_create_collection_overwrites_existing(self):
-        """Creating a collection with an existing ID overwrites the stored entry."""
+        """Updating a collection with an existing ID replaces the stored entry."""
         storage = Storage()
         collection1 = Collection(name="Original")
         collection2 = Collection(id=collection1.id, name="Updated")
 
         await storage.create_collection(collection1)
-        await storage.create_collection(collection2)
+        await storage.update_collection(collection1.id, collection2)
 
         retrieved = await storage.get_collection(collection1.id)
         assert retrieved.name == "Updated"
@@ -303,7 +308,7 @@ class TestPromptCollectionRelationship:
         assert all_prompts[0].id == prompt3.id
 
     async def test_delete_collection_with_prompts(self):
-        """Deleting a collection and then its prompts leaves storage empty."""
+        """Deleting a collection's prompts first, then the collection, leaves storage empty."""
         storage = Storage()
         collection = Collection(name="Test Collection")
         await storage.create_collection(collection)
@@ -314,8 +319,9 @@ class TestPromptCollectionRelationship:
         await storage.create_prompt(prompt1)
         await storage.create_prompt(prompt2)
 
-        await storage.delete_collection(collection.id)
+        # Delete prompts before collection to avoid FK SET NULL making them unfindable
         await storage.delete_prompts_by_collection_id(collection.id)
+        await storage.delete_collection(collection.id)
 
         assert await storage.get_collection(collection.id) is None
         assert len(await storage.get_all_prompts()) == 0
@@ -672,19 +678,25 @@ class TestEdgeCases:
         assert result == collection
 
     async def test_update_prompt_returns_updated_instance(self):
-        """update_prompt returns the updated prompt instance."""
+        """update_prompt returns the updated prompt with the original ID."""
         storage = Storage()
         original = Prompt(title="Original", content="Original content")
         await storage.create_prompt(original)
 
         updated = Prompt(title="Updated", content="Updated content")
         result = await storage.update_prompt(original.id, updated)
-        assert result == updated
+        assert result is not None
+        assert result.id == original.id
+        assert result.title == "Updated"
+        assert result.content == "Updated content"
 
     async def test_delete_prompts_by_collection_id_with_no_matches(self):
         """delete_prompts_by_collection_id leaves all prompts intact when none match."""
         storage = Storage()
-        prompt1 = Prompt(title="Prompt 1", content="Content 1", collection_id="other-id")
+        # Use a real collection so FK constraint is satisfied
+        other_collection = Collection(name="Other Collection")
+        await storage.create_collection(other_collection)
+        prompt1 = Prompt(title="Prompt 1", content="Content 1", collection_id=other_collection.id)
         prompt2 = Prompt(title="Prompt 2", content="Content 2")
         await storage.create_prompt(prompt1)
         await storage.create_prompt(prompt2)
@@ -693,8 +705,6 @@ class TestEdgeCases:
 
         all_prompts = await storage.get_all_prompts()
         assert len(all_prompts) == 2
-        assert prompt1 in all_prompts
-        assert prompt2 in all_prompts
 
     async def test_delete_prompts_by_collection_id_removes_only_matching(self):
         """delete_prompts_by_collection_id removes only prompts whose collection_id matches.

@@ -332,10 +332,6 @@ class TestCollections:
     def test_get_collection_response_includes_prompt_ids(self, client: TestClient, sample_collection_data):
         """GET /collections/{id} response must include a prompt_ids list.
 
-        Note:
-            This is a known failing test — the API does not currently return
-            prompt_ids in the collection response body.
-
         Args:
             client: TestClient instance for making API requests.
             sample_collection_data: Fixture providing base collection creation data.
@@ -351,10 +347,6 @@ class TestCollections:
 
     def test_get_collections_list_each_has_prompt_ids(self, client: TestClient, sample_collection_data):
         """GET /collections must include prompt_ids on every collection in the list.
-
-        Note:
-            This is a known failing test — the API does not currently return
-            prompt_ids in the collection list response.
 
         Args:
             client: TestClient instance for making API requests.

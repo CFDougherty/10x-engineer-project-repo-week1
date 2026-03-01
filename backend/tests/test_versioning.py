@@ -19,13 +19,6 @@ def client():
     from app.api import app
     return TestClient(app)
 
-@pytest.fixture(autouse=True)
-def clear_storage():
-    """Clear storage before each test."""
-    storage.clear()
-    yield
-    storage.clear()
-
 @pytest.fixture
 def sample_prompt_data():
     """Sample prompt data for testing."""
@@ -85,17 +78,14 @@ class TestVersioningModels:
 class TestVersioningStorage:
     """Test the storage layer for versioning."""
 
-    def test_storage_has_versioning_indexes(self):
-        """Verify that storage has the required versioning indexes."""
-        # Check that the storage instance has the required attributes
-        assert hasattr(storage, '_prompts')
-        assert hasattr(storage, '_collections')
+    async def test_storage_has_versioning_indexes(self):
+        """Verify that storage has the required versioning methods."""
+        assert hasattr(storage, 'create_prompt_version')
+        assert hasattr(storage, 'get_prompt_version')
+        assert hasattr(storage, 'get_all_prompt_versions')
+        assert hasattr(storage, 'promote_prompt_version')
 
-        # These will be added for versioning
-        # assert hasattr(storage, '_prompt_meta')
-        # assert hasattr(storage, '_prompt_versions')
-
-    def test_create_prompt_creates_version_1(self):
+    async def test_create_prompt_creates_version_1(self):
         """Creating a prompt should create version 1."""
         from app.models import PromptCreate
         prompt_data = PromptCreate(
@@ -106,7 +96,7 @@ class TestVersioningStorage:
 
         # Create prompt
         prompt = Prompt(**prompt_data.model_dump())
-        created = storage.create_prompt(prompt)
+        created = await storage.create_prompt(prompt)
 
         # Verify prompt was created
         assert created.id == prompt.id
@@ -116,7 +106,7 @@ class TestVersioningStorage:
         # For now, this just creates a regular prompt
         # After implementation, we'll verify versioning
 
-    def test_update_prompt_creates_new_version(self):
+    async def test_update_prompt_creates_new_version(self):
         """Updating a prompt should create a new version."""
         from app.models import PromptCreate, PromptUpdate
 
@@ -127,7 +117,7 @@ class TestVersioningStorage:
             description="Original description"
         )
         prompt = Prompt(**prompt_data.model_dump())
-        storage.create_prompt(prompt)
+        await storage.create_prompt(prompt)
         prompt_id = prompt.id
 
         # Update the prompt
@@ -136,7 +126,7 @@ class TestVersioningStorage:
             content="Updated content",
             description="Updated description"
         )
-        updated = storage.update_prompt(prompt_id, Prompt(**update_data.model_dump()))
+        updated = await storage.update_prompt(prompt_id, Prompt(**update_data.model_dump()))
 
         # Verify update
         assert updated.title == "Updated"
@@ -144,9 +134,9 @@ class TestVersioningStorage:
 
         # After implementation, we'll verify version increment
 
-    def test_patch_prompt_creates_new_version(self):
+    async def test_patch_prompt_creates_new_version(self):
         """Patching a prompt should create a new version."""
-        from app.models import PromptCreate, PromptUpdateOptional
+        from app.models import PromptCreate
 
         # Create initial prompt
         prompt_data = PromptCreate(
@@ -155,11 +145,11 @@ class TestVersioningStorage:
             description="Original description"
         )
         prompt = Prompt(**prompt_data.model_dump())
-        storage.create_prompt(prompt)
+        await storage.create_prompt(prompt)
         prompt_id = prompt.id
 
         # Patch the prompt - construct a proper Prompt object with updated fields
-        existing = storage.get_prompt(prompt_id)
+        existing = await storage.get_prompt(prompt_id)
         patched_prompt = Prompt(
             id=prompt_id,
             title="Patched",
@@ -169,7 +159,7 @@ class TestVersioningStorage:
             created_at=existing.created_at,
             updated_at=existing.updated_at
         )
-        patched = storage.patch_prompt(prompt_id, patched_prompt)
+        patched = await storage.patch_prompt(prompt_id, patched_prompt)
 
         # Verify patch
         assert patched.title == "Patched"

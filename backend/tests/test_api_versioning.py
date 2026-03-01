@@ -357,11 +357,6 @@ class TestVersioningEndpoints:
     def test_promote_version_preserves_original_created_at(self, client: TestClient):
         """Promoting a version must keep the original prompt's created_at, not reset it.
 
-        Note:
-            This is a known failing test. storage.promote_prompt_version() currently
-            creates a new Prompt() with created_at=now(). The fix is to pass
-            created_at=original_prompt.created_at when constructing the promoted Prompt.
-
         Args:
             client: TestClient instance for making API requests.
         """
