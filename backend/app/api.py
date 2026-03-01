@@ -21,20 +21,13 @@ Note:
     Prefer explicitly listing allowed origins when credentials are required.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
-from fastapi import status
+from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
 from typing import Optional
 import uuid
 import asyncio
-from fastapi import FastAPI, HTTPException, Path, Body, Request
-from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi import HTTPException, status
-from fastapi.exceptions import RequestValidationError
-from fastapi import Request
-from fastapi.responses import JSONResponse, PlainTextResponse
-from fastapi import Depends, Request
 from app.models import Prompt, PromptUpdateOptional
 
 from app.models import (
@@ -88,12 +81,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    """Handle HTTP exceptions, including unsupported media type."""
-    if exc.status_code == 415:
-        return PlainTextResponse(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            content="Unsupported media type"
-        )
+    """Handle HTTP exceptions."""
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
@@ -204,7 +192,7 @@ def get_prompt(prompt_id: str):
 
 
 @app.post("/prompts", response_model=Prompt, status_code=201)
-def create_prompt(prompt_data: PromptCreate, request: Request):
+def create_prompt(prompt_data: PromptCreate):
     """Creates a new prompt and persists it to storage.
 
     If `prompt_data.collection_id` is provided, this endpoint validates that the
@@ -215,7 +203,6 @@ def create_prompt(prompt_data: PromptCreate, request: Request):
         prompt_data (PromptCreate): Payload containing the fields required to
             create a new prompt. If `collection_id` is provided, it must refer
             to an existing collection.
-        request: The request object to check content type.
 
     Returns:
         Prompt: The newly created prompt as stored in the database.
@@ -224,13 +211,8 @@ def create_prompt(prompt_data: PromptCreate, request: Request):
         HTTPException: Raised with status code 400 if `prompt_data.collection_id`
             is provided but no matching collection is found.
         HTTPException: Raised with status code 415 if the content type is not
-            application/json.
+            application/json (handled by middleware).
     """
-    # Validate content type
-    content_type = request.headers.get("content-type", "")
-    if "application/json" not in content_type:
-        raise HTTPException(status_code=415, detail="Unsupported media type")
-
     # Validate collection exists if provided
     if prompt_data.collection_id:
         collection = storage.get_collection(prompt_data.collection_id)

@@ -4,7 +4,6 @@ from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from uuid import uuid4, UUID
-from pydantic import BaseModel, Field, field_validator
 import html
 
 def sanitize_html(text: str) -> str:
@@ -57,20 +56,8 @@ class PromptUpdateOptional(BaseModel):
     collection_id: Optional[str] = None
 
     @field_validator('*', mode='before')
-    def check_empty_values(cls, v, info):
-        """Normalize empty or whitespace-only strings to None.
-
-        Args:
-            cls: The model class.
-            v: The value being validated.
-            info: Validator context information provided by Pydantic.
-
-        Returns:
-            Any: None if the input is an empty or whitespace-only string; otherwise
-                the original value.
-        """
-
-        # Ensure that fields are not empty strings or only whitespace
+    def check_empty_values(cls, v):
+        """Normalize empty or whitespace-only strings to None."""
         if isinstance(v, str) and not v.strip():
             return None
         return v
@@ -99,7 +86,7 @@ class PromptBase(BaseModel):
     @field_validator('title', 'content', mode='after')
     def validate_content_non_empty(cls, v):
         """Ensure content is not empty."""
-        if not v or not v.strip():
+        if not v:
             raise ValueError("field must be a non-empty string")
         return v
 
@@ -111,27 +98,6 @@ class PromptBase(BaseModel):
             for pattern in sql_patterns:
                 if pattern.upper() in v.upper():
                     raise ValueError(f"Input contains disallowed SQL pattern: {pattern}")
-        return v
-
-    @field_validator('title', mode='after')
-    def validate_title_length(cls, v):
-        """Ensure title doesn't exceed maximum length."""
-        if len(v) > 200:
-            raise ValueError("Title must be 200 characters or less")
-        return v
-
-    @field_validator('description', mode='after')
-    def validate_description_length(cls, v):
-        """Ensure description doesn't exceed maximum length."""
-        if v is not None and len(v) > 500:
-            raise ValueError("Description must be 500 characters or less")
-        return v
-
-    @field_validator('title', mode='after')
-    def validate_title_non_empty(cls, v):
-        """Ensure title is not empty."""
-        if not v or not v.strip():
-            raise ValueError("title must be a non-empty string")
         return v
 
     @field_validator('tags', mode='after')
@@ -220,8 +186,6 @@ class Prompt(PromptBase):
                 super().__setattr__('updated_at', get_current_time())
             else:
                 super().__setattr__(name, value)
-        elif name == 'collection_id':
-            super().__setattr__(name, value)
         else:
             super().__setattr__(name, value)
 
@@ -241,29 +205,14 @@ class Prompt(PromptBase):
                 self.collection_id == other.collection_id)
 
     def model_copy(self, *, update: Optional[dict] = None, deep: bool = False):
-        """Create a copy of the prompt with a new ID and new timestamps.
-
-        This ensures that copied prompts are independent instances that can be
-        modified without affecting the original.
-
-        Args:
-            update: Optional dictionary of field updates to apply to the copy.
-            deep: Whether to perform a deep copy of nested objects.
-
-        Returns:
-            A new Prompt instance with a new ID and current timestamps.
-        """
-        # Generate new ID and timestamps for the copy
+        """Create a copy of the prompt with a new ID and current timestamps."""
         copy_data = {
             'id': generate_id(),
             'created_at': get_current_time(),
             'updated_at': get_current_time(),
         }
-
-        # Apply any updates if provided
         if update:
             copy_data.update(update)
-
         return super().model_copy(update=copy_data, deep=deep)
 
     model_config = ConfigDict(from_attributes=True)
@@ -301,18 +250,8 @@ class CollectionUpdateOptional(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
 
     @field_validator('*', mode='before')
-    def check_empty_values(cls, v, info):
-        """Normalize empty or whitespace-only strings to None.
-
-        Args:
-            cls: The model class.
-            v: The value being validated.
-            info: Validator context information provided by Pydantic.
-
-        Returns:
-            Any: None if the input is an empty or whitespace-only string; otherwise
-                the original value.
-        """
+    def check_empty_values(cls, v):
+        """Normalize empty or whitespace-only strings to None."""
         if isinstance(v, str) and not v.strip():
             return None
         return v
