@@ -22,17 +22,26 @@ class TestPromptValidation:
     """Validation rules for prompt models."""
 
     def test_prompt_base_requires_title_and_content(self):
-        """PromptBase should demand both title and content."""
-        with pytest.raises(ValidationError) as exc:  # missing title
+        """PromptBase demands both title and content fields.
+
+        Omitting either field raises a ValidationError whose message
+        identifies the missing field by name.
+        """
+        with pytest.raises(ValidationError) as exc:
             PromptBase(content="Has content but no title")
         assert "title" in str(exc.value)
 
-        with pytest.raises(ValidationError) as exc:  # missing content
+        with pytest.raises(ValidationError) as exc:
             PromptBase(title="Only a title")
         assert "content" in str(exc.value)
 
     def test_prompt_base_enforces_length_constraints(self):
-        """Title, content, and description must respect the declared bounds."""
+        """Title, content, and description must respect the declared bounds.
+
+        Title: min 1, max 200 characters.
+        Content: min 1 character.
+        Description: max 500 characters.
+        """
         with pytest.raises(ValidationError):
             PromptBase(title="", content="valid content")
 
@@ -46,7 +55,11 @@ class TestPromptValidation:
             PromptBase(title="Valid", content="valid", description="A" * 501)
 
     def test_prompt_update_optional_normalizes_blank_strings(self):
-        """Blank strings should become None during PromptUpdateOptional validation."""
+        """Blank strings become None during PromptUpdateOptional validation.
+
+        The check_empty_values validator strips and checks each optional
+        string field; any value that is all whitespace is coerced to None.
+        """
         update_payload = PromptUpdateOptional(
             title="   ",
             content="\n\t",
@@ -81,7 +94,11 @@ class TestCollectionValidation:
             CollectionBase()
 
     def test_collection_base_enforces_length_constraints(self):
-        """Name and description fields enforce their min/max lengths."""
+        """Name and description fields enforce their min/max lengths.
+
+        Name: min 1, max 100 characters.
+        Description: max 500 characters.
+        """
         with pytest.raises(ValidationError):
             CollectionBase(name="")
 
@@ -241,6 +258,39 @@ class TestModelSerializationEdgeCases:
         assert len(parsed["collections"]) == 2
         assert all("name" in item for item in parsed["collections"])
 
+    def test_prompt_serialization_with_all_fields(self):
+        """Test serialization with all possible fields populated."""
+        prompt = Prompt(
+            id="123e4567-e89b-12d3-a456-426614174000",
+            title="Complete",
+            content="Full content",
+            description="Full description",
+            collection_id="col-123",
+            created_at=datetime(2023, 1, 1),
+            updated_at=datetime(2023, 1, 2)
+        )
+        dump = prompt.model_dump()
+        assert dump["id"] == "123e4567-e89b-12d3-a456-426614174000"
+        assert dump["created_at"] == datetime(2023, 1, 1)
+        assert dump["updated_at"] == datetime(2023, 1, 2)
+
+    def test_prompt_json_serialization_with_custom_encoder(self):
+        """JSON serialization handles datetime objects by encoding them as ISO strings.
+
+        Note:
+            Pydantic v2 serializes datetime fields to ISO 8601 strings in JSON output.
+            The exact format is determined by Pydantic's internal datetime encoder.
+        """
+        prompt = Prompt(
+            title="Date test",
+            content="Content",
+            created_at=datetime(2023, 1, 1, 12, 30, 45)
+        )
+        json_str = prompt.model_dump_json()
+        data = json.loads(json_str)
+        assert "created_at" in data
+        assert isinstance(data["created_at"], str)
+
 
 class TestPromptValidationErrors:
     """Test specific validation error messages and details."""
@@ -257,6 +307,7 @@ class TestPromptValidationErrors:
         with pytest.raises(ValidationError):
             Prompt(id="not-a-uuid", title="Test", content="Test")
 
+
 class TestModelComparison:
     """Test model equality and comparison behavior."""
 
@@ -272,6 +323,7 @@ class TestModelComparison:
         p2 = Prompt(title="Test", content="Content2")
         assert p1 != p2
 
+
 class TestModelCopying:
     """Test model copying and cloning behavior."""
 
@@ -282,6 +334,7 @@ class TestModelCopying:
         assert copy != original
         assert copy.id != original.id
         assert copy.title == original.title
+
 
 class TestUnicodeAndSpecialCharacters:
     """Test handling of unicode and special characters."""
@@ -303,6 +356,7 @@ class TestUnicodeAndSpecialCharacters:
         prompt = Prompt(title="Multi-line", content=content)
         assert prompt.content == content
 
+
 class TestModelUpdateBehavior:
     """Test model update and modification behavior."""
 
@@ -311,12 +365,16 @@ class TestModelUpdateBehavior:
         import time
         prompt = Prompt(title="Test", content="Original")
         original_updated = prompt.updated_at
-        time.sleep(0.01)  # Ensure time passes
+        time.sleep(0.01)
         prompt.title = "Updated"
         assert prompt.updated_at > original_updated
 
     def test_prompt_update_with_optional_fields(self):
-        """Test updating with optional fields set to None."""
+        """PromptUpdateOptional normalizes None values for optional fields.
+
+        This test verifies the PromptUpdateOptional object's behavior in isolation.
+        Actual persistence of the update requires the storage layer.
+        """
         prompt = Prompt(
             title="Test",
             content="Content",
@@ -324,42 +382,9 @@ class TestModelUpdateBehavior:
             collection_id="col-123"
         )
         update = PromptUpdateOptional(description=None, collection_id=None)
-        # This would need implementation in the actual model
-        # Just testing the update object behavior
         assert update.description is None
         assert update.collection_id is None
 
-class TestModelSerializationEdgeCases:
-    """Additional serialization edge cases."""
-
-    def test_prompt_serialization_with_all_fields(self):
-        """Test serialization with all possible fields populated."""
-        prompt = Prompt(
-            id="123e4567-e89b-12d3-a456-426614174000",
-            title="Complete",
-            content="Full content",
-            description="Full description",
-            collection_id="col-123",
-            created_at=datetime(2023, 1, 1),
-            updated_at=datetime(2023, 1, 2)
-        )
-        dump = prompt.model_dump()
-        assert dump["id"] == "123e4567-e89b-12d3-a456-426614174000"
-        assert dump["created_at"] == datetime(2023, 1, 1)
-        assert dump["updated_at"] == datetime(2023, 1, 2)
-
-    def test_prompt_json_serialization_with_custom_encoder(self):
-        """Test JSON serialization handles datetime objects properly."""
-        prompt = Prompt(
-            title="Date test",
-            content="Content",
-            created_at=datetime(2023, 1, 1, 12, 30, 45)
-        )
-        json_str = prompt.model_dump_json()
-        data = json.loads(json_str)
-        assert "created_at" in data
-        # The exact format depends on Pydantic's datetime serialization
-        assert isinstance(data["created_at"], str)
 
 class TestCollectionEdgeCases:
     """Additional collection-specific edge cases."""
@@ -373,14 +398,19 @@ class TestCollectionEdgeCases:
         assert isinstance(collection.created_at, datetime)
 
     def test_collection_update_optional(self):
-        """Test collection update with optional fields."""
+        """CollectionBase preserves empty strings and whitespace as-is.
+
+        CollectionBase has no check_empty_values() validator (unlike
+        PromptUpdateOptional), so empty strings and whitespace-only values
+        are stored without normalization. Only a dedicated
+        CollectionUpdateOptional model would normalize them to None.
+        """
         update = CollectionBase(name="Updated", description="")
-        # Empty string should be treated as None for description
         assert update.description == ""
 
-        # But whitespace should be normalized
         update2 = CollectionBase(name="Updated", description="   ")
-        assert update2.description == "   "  # This might need adjustment based on actual model behavior
+        assert update2.description == "   "
+
 
 class TestModelValidationWithInvalidTypes:
     """Test model validation with invalid data types."""
@@ -399,3 +429,96 @@ class TestModelValidationWithInvalidTypes:
         """Test that invalid created_at types are rejected for collections."""
         with pytest.raises(ValidationError):
             Collection(name="Test", created_at="invalid")
+
+
+class TestHTMLSanitizationEdgeCases:
+    """Verify HTML sanitization is applied exactly once and not double-escaped."""
+
+    def test_html_tags_escaped_in_title(self):
+        """HTML in title must be escaped to entities."""
+        p = Prompt(title="<b>bold</b>", content="content")
+        assert "<b>" not in p.title
+        assert "&lt;b&gt;" in p.title
+
+    def test_html_sanitization_not_double_escaped(self):
+        """HTML must be escaped once — the result must not itself be re-escaped.
+
+        Note:
+            Single-escaped result: ``&lt;b&gt;bold&lt;/b&gt;``
+            Double-escaped result would be: ``&amp;lt;b&amp;gt;...`` — this must NOT occur.
+        """
+        p = Prompt(title="<b>bold</b>", content="content")
+        assert "&amp;" not in p.title
+
+    def test_html_tags_escaped_in_description(self):
+        """HTML in description must be escaped."""
+        p = Prompt(
+            title="title",
+            content="content",
+            description="<script>alert('xss')</script>",
+        )
+        assert "<script>" not in p.description
+        assert "&lt;script&gt;" in p.description
+
+    def test_plain_text_content_unaffected(self):
+        """Plain text without HTML should pass through sanitization unchanged."""
+        p = Prompt(title="Plain Title", content="Just plain text with no HTML")
+        assert p.title == "Plain Title"
+        assert p.content == "Just plain text with no HTML"
+
+
+class TestTagsValidation:
+    """Tests for tags field validation on prompts."""
+
+    def test_prompt_with_empty_tags_list_is_accepted(self):
+        """An empty tags list [] should be valid."""
+        p = Prompt(title="Test", content="content", tags=[])
+        assert p.tags == []
+
+    def test_prompt_with_valid_tags_are_stored(self):
+        """Valid non-empty tags should be preserved exactly."""
+        p = Prompt(title="Test", content="content", tags=["python", "ai", "nlp"])
+        assert p.tags == ["python", "ai", "nlp"]
+
+    def test_prompt_with_whitespace_only_tag_is_rejected(self):
+        """A tag containing only whitespace should be rejected by validation."""
+        with pytest.raises(ValidationError):
+            Prompt(title="Test", content="content", tags=["  "])
+
+    def test_prompt_with_none_tags_field_is_valid(self):
+        """Omitting tags entirely (None) is valid — tags are optional."""
+        p = Prompt(title="Test", content="content")
+        assert p.tags is None or isinstance(p.tags, list)
+
+    def test_prompt_tags_round_trip_through_model_dump(self):
+        """Tags should survive a model_dump/re-creation round trip."""
+        original = Prompt(title="Test", content="content", tags=["a", "b"])
+        dumped = original.model_dump()
+        restored = Prompt(**dumped)
+        assert restored.tags == ["a", "b"]
+
+
+class TestContentValidationDiscrepancy:
+    """Document the known gap between model validation and the validate_prompt_content utility.
+
+    The Pydantic model (models.py) enforces a minimum content length of 1 character,
+    while the validate_prompt_content utility function (utils.py) enforces a minimum
+    of 10 stripped characters. The API does NOT call validate_prompt_content — only
+    Pydantic validators apply at the request boundary.
+    """
+
+    def test_model_accepts_single_char_content(self):
+        """Pydantic model allows content as short as 1 character."""
+        p = Prompt(title="Title", content="X")
+        assert p.content == "X"
+
+    def test_model_accepts_9_char_content(self):
+        """Pydantic model accepts 9-character content (below util's 10-char minimum)."""
+        p = Prompt(title="Title", content="123456789")
+        assert len(p.content) == 9
+
+    def test_validate_prompt_content_utility_rejects_9_chars(self):
+        """validate_prompt_content() in utils.py requires >= 10 chars, unlike the model."""
+        from app.utils import validate_prompt_content
+        assert validate_prompt_content("123456789") == False
+        assert validate_prompt_content("1234567890") == True

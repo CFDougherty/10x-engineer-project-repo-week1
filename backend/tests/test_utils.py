@@ -20,7 +20,7 @@ class TestSortPromptsByDate:
     """Test suite for sort_prompts_by_date function."""
 
     def test_sort_prompts_descending(self):
-        """Test sorting prompts in descending order (newest first)."""
+        """Prompts are returned newest-first when descending=True."""
         from datetime import timezone
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompts = [
@@ -36,7 +36,7 @@ class TestSortPromptsByDate:
         assert sorted_prompts[2].title == "Oldest"
 
     def test_sort_prompts_ascending(self):
-        """Test sorting prompts in ascending order (oldest first)."""
+        """Prompts are returned oldest-first when descending=False."""
         from datetime import timezone
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompts = [
@@ -52,12 +52,12 @@ class TestSortPromptsByDate:
         assert sorted_prompts[2].title == "Newest"
 
     def test_sort_empty_list(self):
-        """Test sorting an empty list of prompts."""
+        """Sorting an empty list returns an empty list."""
         sorted_prompts = sort_prompts_by_date([], descending=True)
         assert sorted_prompts == []
 
     def test_sort_single_prompt(self):
-        """Test sorting a single prompt."""
+        """Sorting a single-element list returns that same element."""
         from datetime import timezone
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompt = Prompt(title="Single", content="content", created_at=now)
@@ -65,7 +65,12 @@ class TestSortPromptsByDate:
         assert sorted_prompts == [prompt]
 
     def test_sort_prompts_with_same_timestamp(self):
-        """Test sorting prompts with identical timestamps."""
+        """Sorting prompts with identical timestamps returns all prompts without error.
+
+        Note:
+            The sort is stable: prompts with equal timestamps preserve their
+            original relative order.
+        """
         from datetime import timezone
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompts = [
@@ -76,27 +81,29 @@ class TestSortPromptsByDate:
 
         sorted_prompts = sort_prompts_by_date(prompts, descending=True)
         assert len(sorted_prompts) == 3
-        # Order should be preserved when timestamps are equal
 
     def test_sort_prompts_with_none_created_at(self):
-        """Test sorting prompts when some have None created_at values."""
+        """sort_prompts_by_date works correctly when all created_at values are valid datetimes.
+
+        Note:
+            The Pydantic model does not allow None for created_at. This test
+            documents that the function handles valid datetime objects correctly
+            and does not need to guard against None values.
+        """
         from datetime import timezone
         now = datetime.now(timezone.utc).replace(tzinfo=None)
-        # Pydantic model doesn't allow None for created_at, so we test with valid dates
-        # but create a scenario that would cause issues if None were allowed
         prompts = [
             Prompt(title="Valid1", content="content", created_at=now),
             Prompt(title="Valid2", content="content", created_at=now - timedelta(days=1)),
         ]
 
-        # Test that the function works with valid datetime objects
         sorted_prompts = sort_prompts_by_date(prompts, descending=True)
         assert len(sorted_prompts) == 2
         assert sorted_prompts[0].title == "Valid1"
         assert sorted_prompts[1].title == "Valid2"
 
     def test_sort_prompts_default_descending(self):
-        """Test that the default sort order is descending."""
+        """The default sort order is descending (newest first) when no argument is given."""
         from datetime import timezone
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompts = [
@@ -104,13 +111,12 @@ class TestSortPromptsByDate:
             Prompt(title="Newest", content="content", created_at=now),
         ]
 
-        # Call without specifying descending parameter
         sorted_prompts = sort_prompts_by_date(prompts)
         assert sorted_prompts[0].title == "Newest"
         assert sorted_prompts[1].title == "Oldest"
 
     def test_sort_prompts_large_list(self):
-        """Test sorting with a large number of prompts."""
+        """Sorting 1000 prompts by date produces the correct order."""
         from datetime import timezone
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompts = [
@@ -122,14 +128,13 @@ class TestSortPromptsByDate:
         assert sorted_prompts[-1].title == "Prompt 999"
 
     def test_sort_with_identical_timestamps_different_objects(self):
-        """Test sorting when timestamps are identical but objects are different."""
+        """When timestamps are equal, all distinct prompt objects are present in the result."""
         from datetime import timezone
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompt1 = Prompt(title="First", content="content1", created_at=now)
         prompt2 = Prompt(title="Second", content="content2", created_at=now)
 
         sorted_prompts = sort_prompts_by_date([prompt1, prompt2], descending=True)
-        # The order should be preserved when timestamps are equal
         assert sorted_prompts[0] in [prompt1, prompt2]
         assert sorted_prompts[1] in [prompt1, prompt2]
         assert sorted_prompts[0] != sorted_prompts[1]
@@ -138,7 +143,7 @@ class TestFilterPromptsByCollection:
     """Test suite for filter_prompts_by_collection function."""
 
     def test_filter_prompts_by_collection_id(self):
-        """Test filtering prompts by a specific collection ID."""
+        """Only prompts whose collection_id matches the given value are returned."""
         prompts = [
             Prompt(title="Prompt 1", content="content", collection_id="col1"),
             Prompt(title="Prompt 2", content="content", collection_id="col2"),
@@ -153,7 +158,7 @@ class TestFilterPromptsByCollection:
         assert filtered_prompts[1].title == "Prompt 3"
 
     def test_filter_prompts_no_match(self):
-        """Test filtering when no prompts match the collection ID."""
+        """An empty list is returned when no prompts match the collection ID."""
         prompts = [
             Prompt(title="Prompt 1", content="content", collection_id="col1"),
             Prompt(title="Prompt 2", content="content", collection_id="col2"),
@@ -163,12 +168,12 @@ class TestFilterPromptsByCollection:
         assert filtered_prompts == []
 
     def test_filter_prompts_empty_list(self):
-        """Test filtering an empty list of prompts."""
+        """Filtering an empty list of prompts returns an empty list."""
         filtered_prompts = filter_prompts_by_collection([], "col1")
         assert filtered_prompts == []
 
     def test_filter_prompts_all_none_collection_id(self):
-        """Test filtering when all prompts have None as collection_id."""
+        """An empty list is returned when all prompts have collection_id=None."""
         prompts = [
             Prompt(title="Prompt 1", content="content", collection_id=None),
             Prompt(title="Prompt 2", content="content", collection_id=None),
@@ -178,7 +183,7 @@ class TestFilterPromptsByCollection:
         assert filtered_prompts == []
 
     def test_filter_prompts_preserves_order(self):
-        """Test that filtering preserves the original order of matching prompts."""
+        """Filtering preserves the original order of matching prompts."""
         prompts = [
             Prompt(title="First", content="content", collection_id="col1"),
             Prompt(title="Second", content="content", collection_id="col2"),
@@ -190,7 +195,7 @@ class TestFilterPromptsByCollection:
         assert filtered_prompts[1].title == "Third"
 
     def test_filter_prompts_case_sensitive_collection_id(self):
-        """Test that collection_id filtering is case-sensitive."""
+        """collection_id filtering is case-sensitive."""
         prompts = [
             Prompt(title="Prompt 1", content="content", collection_id="Col1"),
             Prompt(title="Prompt 2", content="content", collection_id="col1"),
@@ -201,7 +206,7 @@ class TestFilterPromptsByCollection:
         assert filtered_prompts[0].title == "Prompt 2"
 
     def test_filter_prompts_with_empty_collection_id(self):
-        """Test filtering with empty string collection_id."""
+        """Filtering with an empty string matches prompts whose collection_id is also empty."""
         prompts = [
             Prompt(title="Prompt 1", content="content", collection_id=""),
             Prompt(title="Prompt 2", content="content", collection_id="col1"),
@@ -212,7 +217,7 @@ class TestFilterPromptsByCollection:
         assert filtered_prompts[0].title == "Prompt 1"
 
     def test_filter_prompts_large_list(self):
-        """Test filtering with a large number of prompts."""
+        """Filtering 1000 prompts returns exactly those whose collection_id matches."""
         prompts = [
             Prompt(title=f"Prompt {i}", content="content", collection_id="col1" if i % 2 == 0 else "col2")
             for i in range(1000)
@@ -222,17 +227,20 @@ class TestFilterPromptsByCollection:
         assert all(p.collection_id == "col1" for p in filtered_prompts)
 
     def test_filter_collection_id_case_sensitive_with_none(self):
-        """Test that collection_id filtering is case-sensitive even with None values."""
+        """Filtering distinguishes between Python None and the string "None" as collection_id values.
+
+        Note:
+            Passing None as the filter value matches prompts with collection_id=None.
+            Passing the string "None" matches prompts with collection_id="None".
+        """
         prompts = [
             Prompt(title="Prompt 1", content="content", collection_id=None),
             Prompt(title="Prompt 2", content="content", collection_id="None"),
         ]
-        # Filtering with None should match prompts with collection_id=None
         filtered_prompts = filter_prompts_by_collection(prompts, None)
         assert len(filtered_prompts) == 1
         assert filtered_prompts[0].title == "Prompt 1"
 
-        # Filtering with string "None" should match prompts with collection_id="None"
         filtered_prompts = filter_prompts_by_collection(prompts, "None")
         assert len(filtered_prompts) == 1
         assert filtered_prompts[0].title == "Prompt 2"
@@ -241,7 +249,7 @@ class TestSearchPrompts:
     """Test suite for search_prompts function."""
 
     def test_search_by_title(self):
-        """Test searching prompts by title."""
+        """search_prompts returns prompts whose title contains the query substring."""
         prompts = [
             Prompt(title="Hello World", content="content", description="desc"),
             Prompt(title="Goodbye World", content="content", description="desc"),
@@ -254,7 +262,7 @@ class TestSearchPrompts:
         assert results[1].title == "Goodbye World"
 
     def test_search_by_description(self):
-        """Test searching prompts by description."""
+        """search_prompts returns prompts whose description contains the query substring."""
         prompts = [
             Prompt(title="Title 1", content="content", description="This is about Python"),
             Prompt(title="Title 2", content="content", description="This is about JavaScript"),
@@ -268,7 +276,7 @@ class TestSearchPrompts:
         assert "Title 3" in titles
 
     def test_search_case_insensitive(self):
-        """Test that search is case-insensitive."""
+        """search_prompts matches regardless of case differences between query and content."""
         prompts = [
             Prompt(title="Python", content="content", description="desc"),
             Prompt(title="PYTHON", content="content", description="desc"),
@@ -279,7 +287,7 @@ class TestSearchPrompts:
         assert len(results) == 3
 
     def test_search_empty_query(self):
-        """Test searching with empty query string."""
+        """An empty query string returns all prompts unchanged."""
         prompts = [
             Prompt(title="Title 1", content="content", description="desc"),
             Prompt(title="Title 2", content="content", description="desc"),
@@ -289,19 +297,18 @@ class TestSearchPrompts:
         assert len(results) == 2
 
     def test_search_no_results(self):
-        """Test searching when no prompts match the query."""
+        """search_prompts matches "java" as a case-insensitive substring of "JavaScript"."""
         prompts = [
             Prompt(title="Python", content="content", description="desc"),
             Prompt(title="JavaScript", content="content", description="desc"),
         ]
 
         results = search_prompts(prompts, "java")
-        # \"java\" is a substring of \"JavaScript\" (case-insensitive), so this should match
         assert len(results) == 1
         assert results[0].title == "JavaScript"
 
     def test_search_with_none_description(self):
-        """Test searching when some prompts have None description."""
+        """search_prompts handles prompts with None description without error."""
         prompts = [
             Prompt(title="Python", content="content", description=None),
             Prompt(title="JavaScript", content="content", description="desc"),
@@ -312,7 +319,7 @@ class TestSearchPrompts:
         assert results[0].title == "Python"
 
     def test_search_preserves_order(self):
-        """Test that search results preserve the original order."""
+        """search_prompts preserves the original relative order of matching results."""
         prompts = [
             Prompt(title="First Python", content="content", description="desc"),
             Prompt(title="Second JavaScript", content="content", description="desc"),
@@ -324,7 +331,7 @@ class TestSearchPrompts:
         assert results[1].title == "Third Python"
 
     def test_search_substring_match(self):
-        """Test that search matches substrings correctly."""
+        """search_prompts matches partial substrings within titles."""
         prompts = [
             Prompt(title="Hello World", content="content", description="desc"),
             Prompt(title="World Wide Web", content="content", description="desc"),
@@ -334,7 +341,7 @@ class TestSearchPrompts:
         assert len(results) == 2
 
     def test_search_with_special_characters(self):
-        """Test searching with special characters in query."""
+        """search_prompts handles special characters like dots in the query."""
         prompts = [
             Prompt(title="Python 3.11", content="content", description="desc"),
             Prompt(title="JavaScript ES6", content="content", description="desc"),
@@ -345,7 +352,7 @@ class TestSearchPrompts:
         assert results[0].title == "Python 3.11"
 
     def test_search_with_unicode_characters(self):
-        """Test searching with unicode characters."""
+        """search_prompts correctly matches unicode characters in titles."""
         prompts = [
             Prompt(title="Café", content="content", description="desc"),
             Prompt(title="Naïve", content="content", description="desc"),
@@ -361,7 +368,7 @@ class TestSearchPrompts:
         assert results[0].title == "Naïve"
 
     def test_search_with_whitespace_query(self):
-        """Test searching with query containing whitespace."""
+        """search_prompts matches multi-word queries as a substring."""
         prompts = [
             Prompt(title="Hello World", content="content", description="desc"),
             Prompt(title="Goodbye World", content="content", description="desc"),
@@ -372,7 +379,7 @@ class TestSearchPrompts:
         assert results[0].title == "Hello World"
 
     def test_search_prompts_with_regex_special_chars(self):
-        """Test searching with regex special characters in query."""
+        """search_prompts treats query characters like brackets as literals, not regex."""
         prompts = [
             Prompt(title="File[1].txt", content="content", description="desc"),
             Prompt(title="Regular file", content="content", description="desc"),
@@ -382,23 +389,29 @@ class TestSearchPrompts:
         assert results[0].title == "File[1].txt"
 
     def test_search_prompts_with_very_long_query(self):
-        """Test searching with a very long query string."""
-        # Use a query that's within reasonable limits but still long
+        """search_prompts handles a long query string without error.
+
+        Note:
+            A query longer than any field value will produce no matches.
+            A shorter repeated substring will match the relevant prompt.
+        """
         long_query = "a" * 100
         prompts = [
             Prompt(title="Title with " + "a" * 50, content="content", description="desc"),
             Prompt(title="Different title", content="content", description="desc"),
         ]
         results = search_prompts(prompts, long_query)
-        assert len(results) == 0  # No exact match
-        
-        # Test with a substring that exists
+        assert len(results) == 0
+
         results = search_prompts(prompts, "a" * 10)
         assert len(results) == 1
 
     def test_search_prompts_with_very_long_title(self):
-        """Test searching with very long titles and descriptions."""
-        # Use text within Pydantic limits (200 chars for title, 500 for description)
+        """search_prompts works correctly when titles and descriptions are near their maximum lengths.
+
+        Note:
+            Title max is 200 characters; description max is 500 characters.
+        """
         long_title = "a" * 150
         long_desc = "a" * 400
         prompts = [
@@ -410,7 +423,7 @@ class TestSearchPrompts:
         assert results[0].title == long_title
 
     def test_search_case_insensitive_with_mixed_case(self):
-        """Test case-insensitive search with mixed case in query and content."""
+        """search_prompts matches all prompts that contain the query regardless of casing."""
         prompts = [
             Prompt(title="PyThOn", content="content", description="pYtHoN"),
             Prompt(title="python", content="content", description="PYTHON"),
@@ -418,69 +431,80 @@ class TestSearchPrompts:
         results = search_prompts(prompts, "PyThOn")
         assert len(results) == 2
 
-    def test_search_with_whitespace_query(self):
-        """Test search with query containing only whitespace."""
+    def test_search_with_whitespace_only_query(self):
+        """A whitespace-only query string returns all prompts unchanged.
+
+        Note:
+            search_prompts treats any query that is empty or consists entirely
+            of whitespace as a no-op and returns the full input list.
+        """
         prompts = [
             Prompt(title="Title 1", content="content", description="desc"),
             Prompt(title="Title 2", content="content", description="desc"),
         ]
-        # Whitespace-only queries return all prompts (designed behavior)
         results = search_prompts(prompts, "   ")
         assert len(results) == 2
 
 class TestValidatePromptContent:
-    """Test suite for validate_prompt_content function."""
+    """Test suite for validate_prompt_content function.
+
+    Note:
+        validate_prompt_content requires at least 10 non-whitespace characters
+        after stripping leading and trailing whitespace. The Pydantic model only
+        enforces a 1-character minimum, so there is a deliberate gap between
+        model-level and utility-level validation.
+    """
 
     def test_valid_content(self):
-        """Test validation of valid prompt content."""
+        """Content with 10 or more stripped characters returns True."""
         assert validate_prompt_content("This is valid content") == True
         assert validate_prompt_content("1234567890") == True
         assert validate_prompt_content("Content with 10+ chars") == True
 
     def test_invalid_empty_content(self):
-        """Test validation of empty content."""
+        """Empty string returns False."""
         assert validate_prompt_content("") == False
 
     def test_invalid_whitespace_only(self):
-        """Test validation of whitespace-only content."""
+        """Whitespace-only strings of any composition return False."""
         assert validate_prompt_content("   ") == False
         assert validate_prompt_content("\t\n") == False
         assert validate_prompt_content("   \t   \n   ") == False
 
     def test_invalid_too_short(self):
-        """Test validation of content that's too short."""
+        """Content with fewer than 10 stripped characters returns False."""
         assert validate_prompt_content("Short") == False
-        assert validate_prompt_content("123456789") == False  # 9 chars
+        assert validate_prompt_content("123456789") == False
         assert validate_prompt_content("A") == False
 
     def test_valid_minimum_length(self):
-        """Test validation of content with exactly 10 characters."""
+        """Content with exactly 10 stripped characters returns True."""
         assert validate_prompt_content("1234567890") == True
         assert validate_prompt_content("abcdefghij") == True
 
     def test_validation_with_leading_whitespace(self):
-        """Test validation with leading whitespace."""
+        """Leading whitespace is stripped before the length check."""
         assert validate_prompt_content("   Valid content here") == True
 
     def test_validation_with_trailing_whitespace(self):
-        """Test validation with trailing whitespace."""
+        """Trailing whitespace is stripped before the length check."""
         assert validate_prompt_content("Valid content here   ") == True
 
     def test_validation_with_both_whitespace(self):
-        """Test validation with both leading and trailing whitespace."""
+        """Both leading and trailing whitespace are stripped before the length check."""
         assert validate_prompt_content("   Valid content here   ") == True
 
     def test_validation_none_input(self):
-        """Test validation with None input."""
+        """None input returns False."""
         assert validate_prompt_content(None) == False
 
     def test_validation_with_special_characters(self):
-        """Test validation with special characters."""
+        """Content composed of special characters passes when 10+ stripped chars are present."""
         assert validate_prompt_content("Hello!@#$%^&*()") == True
         assert validate_prompt_content("Special chars: <>&\"'") == True
 
     def test_validation_with_newlines_and_tabs(self):
-        """Test validation with newlines and tabs."""
+        """Embedded newlines and tabs count toward the stripped character length."""
         content = "Line 1\nLine 2\nLine 3"
         assert validate_prompt_content(content) == True
 
@@ -488,150 +512,170 @@ class TestValidatePromptContent:
         assert validate_prompt_content(content) == True
 
     def test_validation_exactly_10_chars(self):
-        """Test validation with exactly 10 characters (minimum)."""
+        """Content at exactly 10 stripped characters passes validation."""
         assert validate_prompt_content("1234567890") == True
         assert validate_prompt_content("abcdefghij") == True
 
     def test_validation_very_long_content(self):
-        """Test validation with very long content."""
+        """Very long content passes validation."""
         long_content = "A" * 10000
         assert validate_prompt_content(long_content) == True
 
     def test_validate_prompt_content_exactly_10_before_strip(self):
-        """Test validation when content has exactly 10 chars before stripping."""
-        # Content with leading/trailing whitespace but exactly 10 chars when stripped
+        """Content that has exactly 10 chars after stripping surrounding whitespace passes."""
         content = "   " + "a" * 10 + "   "
         assert validate_prompt_content(content) == True
 
     def test_validate_prompt_content_9_before_strip(self):
-        """Test validation when content has 9 chars before stripping."""
-        # Content with leading/trailing whitespace but only 9 chars when stripped
+        """Content that has only 9 chars after stripping surrounding whitespace fails."""
         content = "   " + "a" * 9 + "   "
         assert validate_prompt_content(content) == False
 
     def test_validate_content_with_only_newlines(self):
-        """Test validation with content containing only newlines."""
+        """Content consisting only of newlines returns False."""
         content = "\n\n\n\n\n\n\n\n\n"
         assert validate_prompt_content(content) == False
 
     def test_validate_content_with_tabs_only(self):
-        """Test validation with content containing only tabs."""
+        """Content consisting only of tabs returns False."""
         content = "\t\t\t\t\t\t\t\t"
         assert validate_prompt_content(content) == False
 
     def test_validate_prompt_content_with_mixed_whitespace(self):
-        """Test validation with mixed whitespace characters."""
+        """Mixed surrounding whitespace characters are stripped before the length check."""
         content = "\t\n   " + "a" * 10 + " \t\n"
         assert validate_prompt_content(content) == True
 
 class TestExtractVariables:
-    """Test suite for extract_variables function."""
+    """Test suite for extract_variables function.
+
+    Note:
+        The function uses the regex pattern ``{{\\w+}}`` to extract variable
+        placeholders from template content. Only double-brace-wrapped sequences
+        of word characters (letters, digits, underscores, and unicode word chars)
+        are extracted. Patterns with non-word characters inside the braces
+        (dashes, dots, spaces) are not matched. Empty ``{{}}`` patterns are
+        also not matched.
+    """
 
     def test_extract_single_variable(self):
-        """Test extracting a single variable."""
+        """A single well-formed {{variable}} placeholder is extracted."""
         content = "Hello {{name}}!"
         variables = extract_variables(content)
         assert variables == ["name"]
 
     def test_extract_multiple_variables(self):
-        """Test extracting multiple variables."""
+        """Multiple well-formed placeholders are all extracted."""
         content = "Hello {{name}}, you are {{age}} years old!"
         variables = extract_variables(content)
         assert variables == ["name", "age"]
 
     def test_extract_repeated_variables(self):
-        """Test extracting repeated variables."""
+        """Repeated occurrences of the same placeholder are each extracted individually."""
         content = "{{name}} is {{name}} and {{age}} is {{age}}"
         variables = extract_variables(content)
         assert variables == ["name", "name", "age", "age"]
 
     def test_extract_no_variables(self):
-        """Test extracting when no variables are present."""
+        """Content with no placeholders yields an empty list."""
         content = "Hello World!"
         variables = extract_variables(content)
         assert variables == []
 
     def test_extract_empty_string(self):
-        """Test extracting from empty string."""
+        """An empty string yields an empty list."""
         content = ""
         variables = extract_variables(content)
         assert variables == []
 
     def test_extract_variables_with_underscores(self):
-        """Test extracting variables with underscores."""
+        """Underscores in variable names are valid and extracted correctly."""
         content = "Hello {{user_name}} and {{first_name}}!"
         variables = extract_variables(content)
         assert variables == ["user_name", "first_name"]
 
     def test_extract_variables_with_numbers(self):
-        """Test extracting variables with numbers."""
+        """Digits in variable names are valid and extracted correctly."""
         content = "Hello {{user123}} and {{var_456}}!"
         variables = extract_variables(content)
         assert variables == ["user123", "var_456"]
 
     def test_extract_malformed_variables(self):
-        """Test that malformed variables are not extracted."""
+        """Malformed placeholders are not extracted; only well-formed ones are.
+
+        Note:
+            ``{{name and`` is malformed (missing closing braces) and is skipped.
+            ``{{}}`` is malformed (no variable name) and is skipped.
+            ``{{age}}`` is well-formed and is extracted.
+        """
         content = "Hello {{name and {{age}} and {{}}"
         variables = extract_variables(content)
-        # Only properly formed {{variable}} patterns are extracted
-        # {{name and} is malformed (missing closing braces)
-        # {{age}} is properly formed
-        # {{}} is malformed (no variable name)
         assert variables == ["age"]
 
     def test_extract_variables_with_special_chars(self):
-        """Test extracting variables with special characters in content."""
+        """Special characters in surrounding content do not affect extraction."""
         content = "Hello {{name}}! How are you? {{age}} years old."
         variables = extract_variables(content)
         assert variables == ["name", "age"]
 
     def test_extract_variables_preserves_order(self):
-        """Test that variables are extracted in order of appearance."""
+        """Variables are extracted in order of appearance in the content."""
         content = "{{third}} {{first}} {{second}}"
         variables = extract_variables(content)
         assert variables == ["third", "first", "second"]
 
     def test_extract_variables_case_sensitive(self):
-        """Test that variable names are case-sensitive."""
+        """Variable names are case-sensitive; {{Name}} and {{name}} are distinct."""
         content = "{{Name}} and {{name}}"
         variables = extract_variables(content)
         assert variables == ["Name", "name"]
 
     def test_extract_variables_with_nested_braces(self):
-        """Test extracting variables with nested braces."""
+        """Dot-separated paths inside braces are not matched by the word-character pattern.
+
+        Note:
+            ``{{user.profile.name}}`` is not extracted because dots are not word
+            characters. Only simple ``{{word}}`` patterns are matched.
+        """
         content = "Hello {{name}} and {{user.profile.name}}"
         variables = extract_variables(content)
-        # Only simple {{word}} patterns are extracted, not nested ones
         assert variables == ["name"]
 
     def test_extract_variables_with_dashes(self):
-        """Test that variables with dashes are not extracted."""
+        """Variables containing dashes are not extracted; only word characters are allowed.
+
+        Note:
+            ``{{user-name}}`` is not matched because dashes are not word characters.
+            ``{{user_name}}`` is matched because underscores are word characters.
+        """
         content = "Hello {{user-name}} and {{user_name}}"
         variables = extract_variables(content)
-        # Only word characters (letters, numbers, underscores) are allowed
         assert variables == ["user_name"]
 
     def test_extract_variables_with_dots(self):
-        """Test that variables with dots are not extracted."""
+        """Variables containing dots are not extracted; only word characters are allowed.
+
+        Note:
+            ``{{user.name}}`` is not matched because dots are not word characters.
+        """
         content = "Hello {{user.name}} and {{user_name}}"
         variables = extract_variables(content)
-        # Only word characters (letters, numbers, underscores) are allowed
         assert variables == ["user_name"]
 
     def test_extract_variables_with_backticks(self):
-        """Test extracting variables with backticks in content."""
+        """Backtick-delimited content around placeholders does not affect extraction."""
         content = "Hello `{{name}}` and {{age}}"
         variables = extract_variables(content)
         assert variables == ["name", "age"]
 
     def test_extract_variables_with_html_tags(self):
-        """Test extracting variables with HTML tags in content."""
+        """HTML tags surrounding placeholders do not affect extraction."""
         content = "<p>Hello {{name}}</p> and <div>{{age}}</div>"
         variables = extract_variables(content)
         assert variables == ["name", "age"]
 
     def test_extract_variables_with_mixed_content(self):
-        """Test extracting variables with mixed content types."""
+        """Extraction works correctly in realistic multi-line HTML template content."""
         content = """
         <p>Hello {{user_name}}!</p>
         <div>You are {{age}} years old.</div>
@@ -641,53 +685,55 @@ class TestExtractVariables:
         assert variables == ["user_name", "age", "score"]
 
     def test_extract_variables_edge_cases(self):
-        """Test edge cases for variable extraction."""
-        # Test with various edge cases
+        """Leading underscores, digit-prefixed names, and uppercase names are all valid."""
         content = "{{_private}} {{123number}} {{UPPERCASE}}"
         variables = extract_variables(content)
         assert variables == ["_private", "123number", "UPPERCASE"]
 
     def test_extract_variables_with_malformed_braces(self):
-        """Test extraction with malformed brace patterns."""
+        """Only properly formed {{word}} patterns are extracted from content with mixed brace styles."""
         content = "{{name and {{age}} and {{}} and {name}"
         variables = extract_variables(content)
-        # Only properly formed {{word}} patterns should be extracted
         assert variables == ["age"]
 
     def test_extract_variables_with_empty_braces(self):
-        """Test extraction with empty braces."""
+        """Empty braces {{}} are not extracted; adjacent well-formed patterns still are."""
         content = "{{}} and {{name}}"
         variables = extract_variables(content)
         assert variables == ["name"]
 
     def test_extract_variables_at_start_and_end(self):
-        """Test extraction with variables at the start and end of content."""
+        """Placeholders at the very start and end of content are extracted correctly."""
         content = "{{start}} some text {{end}}"
         variables = extract_variables(content)
         assert variables == ["start", "end"]
 
     def test_extract_variables_with_many_repeats(self):
-        """Test extraction with many repeated variables."""
+        """1000 repeated occurrences of a placeholder are each extracted individually."""
         content = "{{var}} " * 1000
         variables = extract_variables(content)
         assert len(variables) == 1000
         assert all(v == "var" for v in variables)
 
     def test_extract_variables_with_very_long_content(self):
-        """Test extraction with very long content."""
+        """Extraction works correctly in very long content strings."""
         long_content = "{{var1}} " + "a" * 10000 + " {{var2}}"
         variables = extract_variables(long_content)
         assert variables == ["var1", "var2"]
 
     def test_extract_variables_with_unicode_in_names(self):
-        """Test extraction with unicode characters in variable names."""
+        """Unicode word characters in variable names are extracted correctly.
+
+        Note:
+            Python's ``\\w`` in regex matches unicode word characters by default,
+            so accented letters like ``é`` and ``ï`` are valid in variable names.
+        """
         content = "{{café}} and {{naïve}}"
         variables = extract_variables(content)
-        # \w in regex includes unicode word characters
         assert variables == ["café", "naïve"]
 
     def test_extract_variables_with_different_whitespace(self):
-        """Test extraction with different whitespace around variables."""
+        """Whitespace surrounding placeholders does not affect extraction."""
         content = "  {{name}}  \t  {{age}}  \n  "
         variables = extract_variables(content)
         assert variables == ["name", "age"]
@@ -696,7 +742,7 @@ class TestIntegration:
     """Integration tests for utility functions working together."""
 
     def test_integration_sort_filter_search(self):
-        """Test integration of sort, filter, and search functions."""
+        """Chaining filter, search, and sort produces correctly ordered, filtered results."""
         from datetime import timezone
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         prompts = [
@@ -706,7 +752,6 @@ class TestIntegration:
             Prompt(title="Other topic", content="content", created_at=now - timedelta(days=2), collection_id="col1", description="Something else"),
         ]
 
-        # Filter by collection, then search, then sort
         filtered = filter_prompts_by_collection(prompts, "col1")
         searched = search_prompts(filtered, "python")
         sorted_results = sort_prompts_by_date(searched, descending=True)
@@ -716,7 +761,7 @@ class TestIntegration:
         assert sorted_results[1].title == "Python tutorial"
 
     def test_integration_validate_and_extract(self):
-        """Test integration of validation and variable extraction."""
+        """validate_prompt_content and extract_variables both work correctly on the same input."""
         content = "   Hello {{name}}, you are {{age}} years old!   "
         is_valid = validate_prompt_content(content)
         variables = extract_variables(content)
@@ -725,14 +770,122 @@ class TestIntegration:
         assert variables == ["name", "age"]
 
     def test_edge_case_empty_string_vs_none(self):
-        """Test that empty string and None are handled differently."""
+        """Empty string and None are each handled correctly by validate and extract."""
         assert validate_prompt_content("") == False
         assert validate_prompt_content(None) == False
 
-        # Empty string should return empty list
         assert extract_variables("") == []
-        # None should also return empty list (handled gracefully)
         assert extract_variables(None) == []
+
+
+class TestFuzzySearchEdgeCases:
+    """Edge cases for the fuzzy search scoring and single-character query logic.
+
+    Note:
+        Fuzzy search uses the fuzzysearch library. A match is included only when
+        its score is >= 30. The score formula is:
+            score = 100 * field_weight - (start * 2) - (dist * 5)
+        where field_weight=2 for title and field_weight=1 for description,
+        start is the character offset of the match, and dist is the edit distance.
+
+        For single-character queries, max_dist=0 is enforced, meaning only exact
+        character matches are considered (no fuzzy tolerance).
+
+        A whitespace-only or empty query bypasses all matching logic and returns
+        the full input list unchanged.
+    """
+
+    def test_fuzzy_single_char_no_match_returns_empty(self):
+        """A single-char fuzzy query returns empty when the character is absent from all prompts."""
+        prompts = [Prompt(title="xyz", content="xyz")]
+        results = search_prompts(prompts, "a", fuzzy=True)
+        assert results == []
+
+    def test_fuzzy_single_char_exact_match_returns_result(self):
+        """A single-char fuzzy query finds prompts whose title contains that exact character."""
+        prompts = [
+            Prompt(title="alpha", content="content"),
+            Prompt(title="xyz", content="xyz"),
+        ]
+        results = search_prompts(prompts, "a", fuzzy=True)
+        assert len(results) == 1
+        assert results[0].title == "alpha"
+
+    def test_fuzzy_results_sorted_best_match_first(self):
+        """Fuzzy results rank earlier matches (lower start index) before later ones.
+
+        Note:
+            A match at position 0 scores higher than the same match further into
+            the string because the score formula subtracts start * 2 from the base.
+        """
+        prompts = [
+            Prompt(title="a very long title string where the word match appears near the end", content="c"),
+            Prompt(title="match is the very first word", content="c"),
+        ]
+        results = search_prompts(prompts, "match", fuzzy=True)
+        assert len(results) >= 1
+        if len(results) == 2:
+            assert results[0].title == "match is the very first word"
+
+    def test_exact_search_title_match_sufficient_for_inclusion(self):
+        """Exact search includes a prompt when its title matches, regardless of description."""
+        prompts = [
+            Prompt(title="Python Guide", content="content", description="Unrelated topic"),
+        ]
+        results = search_prompts(prompts, "python", fuzzy=False)
+        assert len(results) == 1
+
+    def test_exact_search_no_match_returns_empty(self):
+        """Exact search returns an empty list when the query is absent from all fields."""
+        prompts = [
+            Prompt(title="JavaScript Guide", content="js content", description="About JS"),
+        ]
+        results = search_prompts(prompts, "python", fuzzy=False)
+        assert results == []
+
+    def test_exact_search_is_case_insensitive(self):
+        """Exact search matches regardless of case differences."""
+        prompts = [Prompt(title="PYTHON Guide", content="content")]
+        results = search_prompts(prompts, "python", fuzzy=False)
+        assert len(results) == 1
+
+    def test_whitespace_only_query_returns_all_prompts(self):
+        """A whitespace-only query string returns all prompts unchanged."""
+        prompts = [
+            Prompt(title="Prompt A", content="content"),
+            Prompt(title="Prompt B", content="content"),
+        ]
+        results = search_prompts(prompts, "   ", fuzzy=False)
+        assert len(results) == 2
+
+    def test_tab_only_query_returns_all_prompts(self):
+        """A tab-only query string returns all prompts unchanged."""
+        prompts = [
+            Prompt(title="Prompt A", content="content"),
+            Prompt(title="Prompt B", content="content"),
+        ]
+        results = search_prompts(prompts, "\t", fuzzy=False)
+        assert len(results) == 2
+
+    def test_validate_prompt_content_9_chars_fails(self):
+        """validate_prompt_content returns False for 9 stripped chars and True for 10."""
+        assert validate_prompt_content("123456789") == False
+        assert validate_prompt_content("1234567890") == True
+
+    def test_validate_prompt_content_9_chars_with_surrounding_whitespace(self):
+        """Surrounding whitespace is stripped before the length check; 9 stripped chars fails."""
+        assert validate_prompt_content("  123456789  ") == False
+
+    def test_search_field_tags_returns_only_matching_prompts(self):
+        """search_field='tags' filters on the tags list, not on title or description."""
+        prompts = [
+            Prompt(title="Python Tutorial", content="c", tags=["python", "coding"]),
+            Prompt(title="JavaScript", content="c", tags=["javascript", "frontend"]),
+        ]
+        results = search_prompts(prompts, "python", fuzzy=False, search_field="tags")
+        assert len(results) == 1
+        assert "python" in results[0].tags
+
 
 if __name__ == "__main__":
     pytest.main()

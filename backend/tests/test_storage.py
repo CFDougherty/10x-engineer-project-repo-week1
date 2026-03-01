@@ -16,7 +16,7 @@ class TestStorageInitialization:
     """Test storage initialization and basic properties."""
 
     def test_storage_initialization(self):
-        """Test that storage initializes with empty dictionaries."""
+        """Storage initializes with empty dictionaries for prompts and collections."""
         storage = Storage()
         assert isinstance(storage._prompts, dict)
         assert isinstance(storage._collections, dict)
@@ -24,16 +24,14 @@ class TestStorageInitialization:
         assert len(storage._collections) == 0
 
     def test_clear_storage(self):
-        """Test that clear() removes all data."""
+        """clear() removes all prompts and collections from storage."""
         storage = Storage()
 
-        # Add some data
         prompt = Prompt(title="Test", content="Content")
         collection = Collection(name="Test Collection")
         storage.create_prompt(prompt)
         storage.create_collection(collection)
 
-        # Clear storage
         storage.clear()
         assert len(storage._prompts) == 0
         assert len(storage._collections) == 0
@@ -42,7 +40,7 @@ class TestPromptCRUD:
     """Test CRUD operations for prompts."""
 
     def test_create_prompt(self):
-        """Test creating a prompt."""
+        """Creating a prompt stores it and makes it retrievable by its ID."""
         storage = Storage()
         prompt = Prompt(title="Test Prompt", content="Test content")
 
@@ -52,7 +50,7 @@ class TestPromptCRUD:
         assert len(storage._prompts) == 1
 
     def test_create_prompt_overwrites_existing(self):
-        """Test that creating a prompt with existing ID overwrites it."""
+        """Creating a prompt with an existing ID overwrites the stored entry."""
         storage = Storage()
         prompt1 = Prompt(title="Original", content="Original content")
         prompt2 = Prompt(id=prompt1.id, title="Updated", content="Updated content")
@@ -65,7 +63,7 @@ class TestPromptCRUD:
         assert retrieved.content == "Updated content"
 
     def test_get_prompt_existing(self):
-        """Test retrieving an existing prompt."""
+        """Retrieving an existing prompt returns the correct Prompt instance."""
         storage = Storage()
         prompt = Prompt(title="Test", content="Content")
         storage.create_prompt(prompt)
@@ -75,20 +73,20 @@ class TestPromptCRUD:
         assert isinstance(result, Prompt)
 
     def test_get_prompt_nonexistent(self):
-        """Test retrieving a non-existent prompt returns None."""
+        """Retrieving a non-existent prompt returns None."""
         storage = Storage()
         result = storage.get_prompt("nonexistent-id")
         assert result is None
 
     def test_get_all_prompts_empty(self):
-        """Test getting all prompts when none exist."""
+        """get_all_prompts returns an empty list when no prompts have been stored."""
         storage = Storage()
         result = storage.get_all_prompts()
         assert result == []
         assert isinstance(result, list)
 
     def test_get_all_prompts_with_data(self):
-        """Test getting all prompts with existing data."""
+        """get_all_prompts returns all stored prompts."""
         storage = Storage()
         prompt1 = Prompt(title="First", content="First content")
         prompt2 = Prompt(title="Second", content="Second content")
@@ -102,7 +100,7 @@ class TestPromptCRUD:
         assert prompt2 in result
 
     def test_update_prompt_existing(self):
-        """Test updating an existing prompt."""
+        """Updating an existing prompt replaces it and returns the updated instance."""
         storage = Storage()
         original = Prompt(title="Original", content="Original content")
         updated = Prompt(title="Updated", content="Updated content")
@@ -114,14 +112,14 @@ class TestPromptCRUD:
         assert storage.get_prompt(original.id) == updated
 
     def test_update_prompt_nonexistent(self):
-        """Test updating a non-existent prompt returns None."""
+        """Updating a non-existent prompt returns None."""
         storage = Storage()
         prompt = Prompt(title="Test", content="Content")
         result = storage.update_prompt("nonexistent-id", prompt)
         assert result is None
 
     def test_delete_prompt_existing(self):
-        """Test deleting an existing prompt."""
+        """Deleting an existing prompt returns True and removes it from storage."""
         storage = Storage()
         prompt = Prompt(title="Test", content="Content")
         storage.create_prompt(prompt)
@@ -132,30 +130,26 @@ class TestPromptCRUD:
         assert len(storage._prompts) == 0
 
     def test_delete_prompt_nonexistent(self):
-        """Test deleting a non-existent prompt returns False."""
+        """Deleting a non-existent prompt returns False."""
         storage = Storage()
         result = storage.delete_prompt("nonexistent-id")
         assert result is False
 
     def test_prompt_lifecycle(self):
-        """Test the complete lifecycle of a prompt."""
+        """Full create-read-update-delete lifecycle of a prompt behaves correctly."""
         storage = Storage()
 
-        # Create
         prompt = Prompt(title="Lifecycle Test", content="Original content")
         created = storage.create_prompt(prompt)
         assert storage.get_prompt(prompt.id) == prompt
 
-        # Read
         retrieved = storage.get_prompt(prompt.id)
         assert retrieved == prompt
 
-        # Update
         updated_prompt = Prompt(id=prompt.id, title="Updated", content="Updated content")
         storage.update_prompt(prompt.id, updated_prompt)
         assert storage.get_prompt(prompt.id).title == "Updated"
 
-        # Delete
         storage.delete_prompt(prompt.id)
         assert storage.get_prompt(prompt.id) is None
 
@@ -163,7 +157,7 @@ class TestCollectionCRUD:
     """Test CRUD operations for collections."""
 
     def test_create_collection(self):
-        """Test creating a collection."""
+        """Creating a collection stores it and makes it retrievable by its ID."""
         storage = Storage()
         collection = Collection(name="Test Collection")
 
@@ -173,7 +167,7 @@ class TestCollectionCRUD:
         assert len(storage._collections) == 1
 
     def test_create_collection_overwrites_existing(self):
-        """Test that creating a collection with existing ID overwrites it."""
+        """Creating a collection with an existing ID overwrites the stored entry."""
         storage = Storage()
         collection1 = Collection(name="Original")
         collection2 = Collection(id=collection1.id, name="Updated")
@@ -185,7 +179,7 @@ class TestCollectionCRUD:
         assert retrieved.name == "Updated"
 
     def test_get_collection_existing(self):
-        """Test retrieving an existing collection."""
+        """Retrieving an existing collection returns the correct Collection instance."""
         storage = Storage()
         collection = Collection(name="Test Collection")
         storage.create_collection(collection)
@@ -195,20 +189,20 @@ class TestCollectionCRUD:
         assert isinstance(result, Collection)
 
     def test_get_collection_nonexistent(self):
-        """Test retrieving a non-existent collection returns None."""
+        """Retrieving a non-existent collection returns None."""
         storage = Storage()
         result = storage.get_collection("nonexistent-id")
         assert result is None
 
     def test_get_all_collections_empty(self):
-        """Test getting all collections when none exist."""
+        """get_all_collections returns an empty list when no collections exist."""
         storage = Storage()
         result = storage.get_all_collections()
         assert result == []
         assert isinstance(result, list)
 
     def test_get_all_collections_with_data(self):
-        """Test getting all collections with existing data."""
+        """get_all_collections returns all stored collections."""
         storage = Storage()
         collection1 = Collection(name="First")
         collection2 = Collection(name="Second")
@@ -222,7 +216,7 @@ class TestCollectionCRUD:
         assert collection2 in result
 
     def test_delete_collection_existing(self):
-        """Test deleting an existing collection."""
+        """Deleting an existing collection returns True and removes it from storage."""
         storage = Storage()
         collection = Collection(name="Test Collection")
         storage.create_collection(collection)
@@ -233,25 +227,22 @@ class TestCollectionCRUD:
         assert len(storage._collections) == 0
 
     def test_delete_collection_nonexistent(self):
-        """Test deleting a non-existent collection returns False."""
+        """Deleting a non-existent collection returns False."""
         storage = Storage()
         result = storage.delete_collection("nonexistent-id")
         assert result is False
 
     def test_collection_lifecycle(self):
-        """Test the complete lifecycle of a collection."""
+        """Full create-read-delete lifecycle of a collection behaves correctly."""
         storage = Storage()
 
-        # Create
         collection = Collection(name="Lifecycle Test")
         created = storage.create_collection(collection)
         assert storage.get_collection(collection.id) == collection
 
-        # Read
         retrieved = storage.get_collection(collection.id)
         assert retrieved == collection
 
-        # Delete
         storage.delete_collection(collection.id)
         assert storage.get_collection(collection.id) is None
 
@@ -259,21 +250,24 @@ class TestPromptCollectionRelationship:
     """Test relationships and operations between prompts and collections."""
 
     def test_get_prompts_by_collection_empty(self):
-        """Test getting prompts by collection when none exist."""
+        """get_prompts_by_collection returns an empty list when no prompts match."""
         storage = Storage()
         result = storage.get_prompts_by_collection("nonexistent-collection")
         assert result == []
         assert isinstance(result, list)
 
     def test_get_prompts_by_collection_with_data(self):
-        """Test getting prompts by collection with existing data."""
+        """get_prompts_by_collection returns only prompts belonging to the given collection.
+
+        Prompts with a different or missing collection_id are excluded from the result.
+        """
         storage = Storage()
         collection = Collection(name="Test Collection")
         storage.create_collection(collection)
 
         prompt1 = Prompt(title="Prompt 1", content="Content 1", collection_id=collection.id)
         prompt2 = Prompt(title="Prompt 2", content="Content 2", collection_id=collection.id)
-        prompt3 = Prompt(title="Prompt 3", content="Content 3")  # No collection
+        prompt3 = Prompt(title="Prompt 3", content="Content 3")
 
         storage.create_prompt(prompt1)
         storage.create_prompt(prompt2)
@@ -286,14 +280,17 @@ class TestPromptCollectionRelationship:
         assert prompt3 not in result
 
     def test_delete_prompts_by_collection_id(self):
-        """Test deleting all prompts associated with a collection."""
+        """delete_prompts_by_collection_id removes all prompts for a given collection.
+
+        Prompts without a matching collection_id are left untouched.
+        """
         storage = Storage()
         collection = Collection(name="Test Collection")
         storage.create_collection(collection)
 
         prompt1 = Prompt(title="Prompt 1", content="Content 1", collection_id=collection.id)
         prompt2 = Prompt(title="Prompt 2", content="Content 2", collection_id=collection.id)
-        prompt3 = Prompt(title="Prompt 3", content="Content 3")  # Different collection
+        prompt3 = Prompt(title="Prompt 3", content="Content 3")
 
         storage.create_prompt(prompt1)
         storage.create_prompt(prompt2)
@@ -306,7 +303,7 @@ class TestPromptCollectionRelationship:
         assert all_prompts[0].id == prompt3.id
 
     def test_delete_collection_with_prompts(self):
-        """Test deleting a collection and its associated prompts."""
+        """Deleting a collection and then its prompts leaves storage empty."""
         storage = Storage()
         collection = Collection(name="Test Collection")
         storage.create_collection(collection)
@@ -317,7 +314,6 @@ class TestPromptCollectionRelationship:
         storage.create_prompt(prompt1)
         storage.create_prompt(prompt2)
 
-        # Delete collection and prompts
         storage.delete_collection(collection.id)
         storage.delete_prompts_by_collection_id(collection.id)
 
@@ -328,7 +324,7 @@ class TestEdgeCases:
     """Test edge cases and error conditions."""
 
     def test_prompt_with_none_values(self):
-        """Test handling of None values in prompt fields."""
+        """Prompts with None for optional fields are stored and retrieved correctly."""
         storage = Storage()
         prompt = Prompt(title="Test", content="Content", description=None, collection_id=None)
 
@@ -339,7 +335,7 @@ class TestEdgeCases:
         assert retrieved.collection_id is None
 
     def test_collection_with_none_description(self):
-        """Test handling of None description in collection."""
+        """Collections with None description are stored and retrieved correctly."""
         storage = Storage()
         collection = Collection(name="Test", description=None)
 
@@ -349,7 +345,7 @@ class TestEdgeCases:
         assert retrieved.description is None
 
     def test_multiple_prompts_same_collection(self):
-        """Test multiple prompts in the same collection."""
+        """Ten prompts assigned to the same collection are all retrievable together."""
         storage = Storage()
         collection = Collection(name="Test Collection")
         storage.create_collection(collection)
@@ -365,22 +361,21 @@ class TestEdgeCases:
         assert all(p in result for p in prompts)
 
     def test_prompt_with_empty_strings(self):
-        """Test prompt creation with empty strings (should be handled by Pydantic)."""
+        """Pydantic validation rejects empty title and content before storage is reached."""
         storage = Storage()
-        # This should fail validation at the model level, not storage level
-        with pytest.raises(Exception):  # Pydantic validation error
+        with pytest.raises(Exception):
             prompt = Prompt(title="", content="")
             storage.create_prompt(prompt)
 
     def test_collection_with_empty_name(self):
-        """Test collection creation with empty name (should fail validation)."""
+        """Pydantic validation rejects an empty collection name before storage is reached."""
         storage = Storage()
-        with pytest.raises(Exception):  # Pydantic validation error
+        with pytest.raises(Exception):
             collection = Collection(name="")
             storage.create_collection(collection)
 
     def test_storage_isolation(self):
-        """Test that different storage instances are isolated."""
+        """Different Storage instances are fully isolated from one another."""
         storage1 = Storage()
         storage2 = Storage()
 
@@ -391,7 +386,7 @@ class TestEdgeCases:
         assert storage2.get_prompt(prompt.id) is None
 
     def test_prompt_id_generation(self):
-        """Test that prompt IDs are unique."""
+        """All auto-generated prompt IDs are unique across 100 prompts."""
         storage = Storage()
         prompts = []
 
@@ -400,12 +395,11 @@ class TestEdgeCases:
             storage.create_prompt(prompt)
             prompts.append(prompt)
 
-        # Check all IDs are unique
         prompt_ids = [p.id for p in prompts]
         assert len(prompt_ids) == len(set(prompt_ids))
 
     def test_collection_id_generation(self):
-        """Test that collection IDs are unique."""
+        """All auto-generated collection IDs are unique across 100 collections."""
         storage = Storage()
         collections = []
 
@@ -414,17 +408,15 @@ class TestEdgeCases:
             storage.create_collection(collection)
             collections.append(collection)
 
-        # Check all IDs are unique
         collection_ids = [c.id for c in collections]
         assert len(collection_ids) == len(set(collection_ids))
 
     def test_prompt_updated_at_updates_on_modification(self):
-        """Test that updated_at timestamp changes when prompt is updated."""
+        """updated_at timestamp on the stored prompt changes after an update call."""
         storage = Storage()
         original = Prompt(title="Original", content="Original content")
         storage.create_prompt(original)
 
-        # Wait a tiny bit to ensure different timestamp
         import time
         time.sleep(0.01)
 
@@ -435,14 +427,19 @@ class TestEdgeCases:
         assert retrieved.updated_at > original.updated_at
 
     def test_get_prompts_by_collection_id_method(self):
-        """Test the get_prompts_by_collection_id method (duplicate of get_prompts_by_collection)."""
+        """get_prompts_by_collection_id is equivalent to get_prompts_by_collection.
+
+        Note:
+            Two methods exist for this lookup: get_prompts_by_collection and
+            get_prompts_by_collection_id. Both return identical results.
+        """
         storage = Storage()
         collection = Collection(name="Test Collection")
         storage.create_collection(collection)
 
         prompt1 = Prompt(title="Prompt 1", content="Content 1", collection_id=collection.id)
         prompt2 = Prompt(title="Prompt 2", content="Content 2", collection_id=collection.id)
-        prompt3 = Prompt(title="Prompt 3", content="Content 3")  # No collection
+        prompt3 = Prompt(title="Prompt 3", content="Content 3")
 
         storage.create_prompt(prompt1)
         storage.create_prompt(prompt2)
@@ -455,73 +452,84 @@ class TestEdgeCases:
         assert prompt3 not in result
 
     def test_prompt_validation_fails_with_empty_title(self):
-        """Test that Pydantic validation rejects empty title."""
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        """Pydantic validation rejects empty title."""
+        with pytest.raises(Exception):
             Prompt(title="", content="Valid content")
 
     def test_prompt_validation_fails_with_empty_content(self):
-        """Test that Pydantic validation rejects empty content."""
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        """Pydantic validation rejects empty content."""
+        with pytest.raises(Exception):
             Prompt(title="Valid title", content="")
 
     def test_collection_validation_fails_with_empty_name(self):
-        """Test that Pydantic validation rejects empty collection name."""
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        """Pydantic validation rejects empty collection name."""
+        with pytest.raises(Exception):
             Collection(name="")
 
     def test_prompt_validation_fails_with_whitespace_only_title(self):
-        """Test that Pydantic validation rejects whitespace-only title."""
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        """Pydantic validation rejects whitespace-only title."""
+        with pytest.raises(Exception):
             Prompt(title="   ", content="Valid content")
 
     def test_prompt_validation_fails_with_whitespace_only_content(self):
-        """Test that Pydantic validation rejects whitespace-only content."""
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        """Pydantic validation rejects whitespace-only content."""
+        with pytest.raises(Exception):
             Prompt(title="Valid title", content="   ")
 
     def test_prompt_validation_fails_with_too_long_title(self):
-        """Test that Pydantic validation rejects title exceeding max length."""
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        """Pydantic validation rejects title exceeding the 200-character maximum."""
+        with pytest.raises(Exception):
             Prompt(title="A" * 201, content="Valid content")
 
     def test_prompt_validation_fails_with_too_long_description(self):
-        """Test that Pydantic validation rejects description exceeding max length."""
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        """Pydantic validation rejects description exceeding the 500-character maximum."""
+        with pytest.raises(Exception):
             Prompt(title="Valid title", content="Valid content", description="A" * 501)
 
     def test_collection_validation_fails_with_too_long_name(self):
-        """Test that Pydantic validation rejects collection name exceeding max length."""
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        """Pydantic validation rejects collection name exceeding the 100-character maximum."""
+        with pytest.raises(Exception):
             Collection(name="A" * 101)
 
     def test_collection_validation_fails_with_too_long_description(self):
-        """Test that Pydantic validation rejects collection description exceeding max length."""
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        """Pydantic validation rejects collection description exceeding the 500-character maximum."""
+        with pytest.raises(Exception):
             Collection(name="Valid name", description="A" * 501)
 
     def test_prompt_with_maximum_valid_lengths(self):
-        """Test prompt creation with maximum valid field lengths."""
-        # Should not raise an exception
+        """Prompt creation succeeds with fields at their maximum valid lengths.
+
+        Note:
+            Title max: 200 characters. Description max: 500 characters.
+        """
         prompt = Prompt(
-            title="A" * 200,  # max length
-            content="A",  # min length
-            description="A" * 500  # max length
+            title="A" * 200,
+            content="A",
+            description="A" * 500
         )
         assert len(prompt.title) == 200
         assert len(prompt.description) == 500
 
     def test_collection_with_maximum_valid_lengths(self):
-        """Test collection creation with maximum valid field lengths."""
-        # Should not raise an exception
+        """Collection creation succeeds with fields at their maximum valid lengths.
+
+        Note:
+            Name max: 100 characters. Description max: 500 characters.
+        """
         collection = Collection(
-            name="A" * 100,  # max length
-            description="A" * 500  # max length
+            name="A" * 100,
+            description="A" * 500
         )
         assert len(collection.name) == 100
         assert len(collection.description) == 500
 
     def test_prompt_update_preserves_id(self):
-        """Test that updating a prompt uses the provided prompt's ID field."""
+        """update_prompt stores the updated prompt under the original ID key.
+
+        Note:
+            update_prompt uses the provided prompt_id as the storage key.
+            The retrieved prompt's id field reflects the updated prompt object's id.
+        """
         storage = Storage()
         original = Prompt(title="Original", content="Original content")
         storage.create_prompt(original)
@@ -530,130 +538,133 @@ class TestEdgeCases:
         storage.update_prompt(original.id, updated)
 
         retrieved = storage.get_prompt(original.id)
-        # The retrieved prompt should have the ID from the updated prompt
         assert retrieved.id == updated.id
         assert retrieved.title == "Updated"
 
     def test_delete_nonexistent_prompt_returns_false(self):
-        """Test that deleting a non-existent prompt returns False."""
+        """Deleting a non-existent prompt returns False."""
         storage = Storage()
         result = storage.delete_prompt("nonexistent-id")
         assert result is False
 
     def test_delete_nonexistent_collection_returns_false(self):
-        """Test that deleting a non-existent collection returns False."""
+        """Deleting a non-existent collection returns False."""
         storage = Storage()
         result = storage.delete_collection("nonexistent-id")
         assert result is False
 
     def test_get_all_prompts_returns_list(self):
-        """Test that get_all_prompts returns a list."""
+        """get_all_prompts always returns a list."""
         storage = Storage()
         result = storage.get_all_prompts()
         assert isinstance(result, list)
 
     def test_get_all_collections_returns_list(self):
-        """Test that get_all_collections returns a list."""
+        """get_all_collections always returns a list."""
         storage = Storage()
         result = storage.get_all_collections()
         assert isinstance(result, list)
 
     def test_get_prompts_by_collection_returns_list(self):
-        """Test that get_prompts_by_collection returns a list."""
+        """get_prompts_by_collection always returns a list."""
         storage = Storage()
         result = storage.get_prompts_by_collection("nonexistent-id")
         assert isinstance(result, list)
 
     def test_get_prompts_by_collection_id_returns_list(self):
-        """Test that get_prompts_by_collection_id returns a list."""
+        """get_prompts_by_collection_id always returns a list."""
         storage = Storage()
         result = storage.get_prompts_by_collection_id("nonexistent-id")
         assert isinstance(result, list)
 
     def test_storage_clear_returns_none(self):
-        """Test that clear method returns None."""
+        """clear() returns None."""
         storage = Storage()
         result = storage.clear()
         assert result is None
 
     def test_prompt_created_at_is_set(self):
-        """Test that created_at is automatically set when prompt is created."""
+        """created_at is automatically populated when a Prompt is instantiated."""
         prompt = Prompt(title="Test", content="Content")
         assert prompt.created_at is not None
         assert isinstance(prompt.created_at, datetime)
 
     def test_collection_created_at_is_set(self):
-        """Test that created_at is automatically set when collection is created."""
+        """created_at is automatically populated when a Collection is instantiated."""
         collection = Collection(name="Test")
         assert collection.created_at is not None
         assert isinstance(collection.created_at, datetime)
 
     def test_prompt_id_is_generated(self):
-        """Test that prompt ID is automatically generated."""
+        """Prompt ID is automatically generated as a UUID4 string (36 characters)."""
         prompt = Prompt(title="Test", content="Content")
         assert prompt.id is not None
-        assert len(prompt.id) == 36  # UUID4 string length
+        assert len(prompt.id) == 36
 
     def test_collection_id_is_generated(self):
-        """Test that collection ID is automatically generated."""
+        """Collection ID is automatically generated as a UUID4 string (36 characters)."""
         collection = Collection(name="Test")
         assert collection.id is not None
-        assert len(collection.id) == 36  # UUID4 string length
+        assert len(collection.id) == 36
 
     def test_prompt_equality(self):
-        """Test prompt equality comparison."""
+        """Prompt equality comparison."""
         prompt1 = Prompt(title="Test", content="Content")
         prompt2 = Prompt(id=prompt1.id, title="Test", content="Content")
         assert prompt1 == prompt2
 
     def test_collection_equality(self):
-        """Test collection equality comparison."""
+        """Collection equality comparison."""
         collection1 = Collection(name="Test")
         collection2 = Collection(id=collection1.id, name="Test")
         assert collection1 == collection2
 
     def test_prompt_with_custom_id(self):
-        """Test creating a prompt with a custom UUID ID."""
+        """Creating a Prompt with an explicit UUID uses that ID verbatim."""
         custom_id = str(uuid4())
         prompt = Prompt(id=custom_id, title="Test", content="Content")
         assert prompt.id == custom_id
 
     def test_collection_with_custom_id(self):
-        """Test creating a collection with a custom ID."""
+        """Creating a Collection with an explicit ID uses that ID verbatim."""
         custom_id = "custom-id-456"
         collection = Collection(id=custom_id, name="Test")
         assert collection.id == custom_id
 
     def test_prompt_update_with_different_id(self):
-        """Test that update_prompt uses the provided prompt_id, not prompt.id."""
+        """update_prompt stores the new prompt under the original key.
+
+        Note:
+            update_prompt uses prompt_id as the dict key, not new_prompt.id.
+            After the call, get_prompt(original.id) returns the new prompt object
+            whose own .id field is the new prompt's UUID (not the original's).
+        """
         storage = Storage()
         original = Prompt(title="Original", content="Original content")
         storage.create_prompt(original)
 
-        # Create a new prompt with a different UUID ID
         new_prompt = Prompt(id=str(uuid4()), title="New", content="New content")
         storage.update_prompt(original.id, new_prompt)
 
-        # The original ID should still be used as the key
         retrieved = storage.get_prompt(original.id)
-        assert retrieved.id == new_prompt.id  # But the prompt's ID is now different
+        assert retrieved.id == new_prompt.id
 
     def test_create_prompt_returns_same_instance(self):
-        """Test that create_prompt returns the same instance that was passed in."""
+        """create_prompt returns the exact same object that was passed in."""
         storage = Storage()
         prompt = Prompt(title="Test", content="Content")
         result = storage.create_prompt(prompt)
         assert result is prompt
 
     def test_create_collection_returns_same_instance(self):
-        """Test that create_collection returns the same instance that was passed in."""
+        """create_collection returns the exact same object that was passed in."""
         storage = Storage()
         collection = Collection(name="Test")
         result = storage.create_collection(collection)
         assert result is collection
 
     def test_update_prompt_returns_updated_instance(self):
-        """Test that update_prompt returns the updated instance."""
+        """update_prompt returns the updated prompt instance."""
         storage = Storage()
         original = Prompt(title="Original", content="Original content")
         storage.create_prompt(original)
@@ -663,25 +674,25 @@ class TestEdgeCases:
         assert result == updated
 
     def test_delete_prompts_by_collection_id_with_no_matches(self):
-        """Test delete_prompts_by_collection_id when no prompts match."""
+        """delete_prompts_by_collection_id leaves all prompts intact when none match."""
         storage = Storage()
-        # Create prompts with different collection IDs
         prompt1 = Prompt(title="Prompt 1", content="Content 1", collection_id="other-id")
-        prompt2 = Prompt(title="Prompt 2", content="Content 2")  # No collection
+        prompt2 = Prompt(title="Prompt 2", content="Content 2")
         storage.create_prompt(prompt1)
         storage.create_prompt(prompt2)
 
-        # Delete prompts for non-existent collection
         storage.delete_prompts_by_collection_id("nonexistent-id")
 
-        # All prompts should still exist
         all_prompts = storage.get_all_prompts()
         assert len(all_prompts) == 2
         assert prompt1 in all_prompts
         assert prompt2 in all_prompts
 
     def test_delete_prompts_by_collection_id_removes_only_matching(self):
-        """Test that delete_prompts_by_collection_id only removes prompts with matching collection_id."""
+        """delete_prompts_by_collection_id removes only prompts whose collection_id matches.
+
+        Prompts assigned to other collections or to no collection are untouched.
+        """
         storage = Storage()
         collection1 = Collection(name="Collection 1")
         collection2 = Collection(name="Collection 2")
@@ -690,15 +701,13 @@ class TestEdgeCases:
 
         prompt1 = Prompt(title="Prompt 1", content="Content 1", collection_id=collection1.id)
         prompt2 = Prompt(title="Prompt 2", content="Content 2", collection_id=collection2.id)
-        prompt3 = Prompt(title="Prompt 3", content="Content 3")  # No collection
+        prompt3 = Prompt(title="Prompt 3", content="Content 3")
         storage.create_prompt(prompt1)
         storage.create_prompt(prompt2)
         storage.create_prompt(prompt3)
 
-        # Delete prompts for collection1
         storage.delete_prompts_by_collection_id(collection1.id)
 
-        # Only prompt1 should be deleted
         all_prompts = storage.get_all_prompts()
         assert len(all_prompts) == 2
         assert prompt1 not in all_prompts
@@ -709,21 +718,19 @@ class TestDataPersistence:
     """Test data persistence within session."""
 
     def test_data_persists_within_session(self):
-        """Test that data persists within the same storage instance."""
+        """Data created in a Storage instance persists for the lifetime of that instance."""
         storage = Storage()
 
-        # Create data
         prompt = Prompt(title="Test", content="Content")
         collection = Collection(name="Test Collection")
         storage.create_prompt(prompt)
         storage.create_collection(collection)
 
-        # Verify persistence
         assert storage.get_prompt(prompt.id) == prompt
         assert storage.get_collection(collection.id) == collection
 
     def test_data_isolation_between_sessions(self):
-        """Test that data doesn't persist between different storage instances."""
+        """Data from one Storage instance is not visible in a separately created instance."""
         storage1 = Storage()
         prompt = Prompt(title="Test", content="Content")
         storage1.create_prompt(prompt)
@@ -732,20 +739,17 @@ class TestDataPersistence:
         assert storage2.get_prompt(prompt.id) is None
 
     def test_clear_removes_all_data(self):
-        """Test that clear() removes all data completely."""
+        """clear() removes all prompts and collections completely."""
         storage = Storage()
 
-        # Add multiple prompts and collections
         for i in range(10):
             prompt = Prompt(title=f"Prompt {i}", content=f"Content {i}")
             collection = Collection(name=f"Collection {i}")
             storage.create_prompt(prompt)
             storage.create_collection(collection)
 
-        # Clear storage
         storage.clear()
 
-        # Verify everything is gone
         assert len(storage._prompts) == 0
         assert len(storage._collections) == 0
         assert storage.get_all_prompts() == []
@@ -755,26 +759,142 @@ class TestGlobalStorageInstance:
     """Test the global storage instance."""
 
     def test_global_storage_instance_exists(self):
-        """Test that the global storage instance exists."""
+        """The module-level storage singleton is a Storage instance."""
         from app.storage import storage
         assert isinstance(storage, Storage)
 
     def test_global_storage_operations(self):
-        """Test operations on the global storage instance."""
+        """CRUD operations work correctly on the global storage singleton."""
         from app.storage import storage
 
-        # Clear first to ensure clean state
         storage.clear()
 
-        # Test prompt operations
         prompt = Prompt(title="Global Test", content="Global content")
         storage.create_prompt(prompt)
         assert storage.get_prompt(prompt.id) == prompt
 
-        # Test collection operations
         collection = Collection(name="Global Collection")
         storage.create_collection(collection)
         assert storage.get_collection(collection.id) == collection
 
-        # Clean up
         storage.clear()
+
+
+class TestVersioningStorage:
+    """Priority 6 storage-layer versioning edge cases."""
+
+    def test_create_prompt_version_sets_version_on_prompt_object(self):
+        """create_prompt_version updates prompt.version on the prompt object itself."""
+        storage = Storage()
+        prompt = Prompt(title="Test", content="Content")
+        storage.create_prompt(prompt)
+
+        storage.create_prompt_version(prompt.id, prompt)
+
+        assert prompt.version == 1
+
+    def test_create_prompt_version_increments_sequentially(self):
+        """Calling create_prompt_version multiple times increments the version number."""
+        storage = Storage()
+        prompt = Prompt(title="Test", content="Content")
+        storage.create_prompt(prompt)
+
+        v1 = storage.create_prompt_version(prompt.id, prompt)
+        assert v1.version == 1
+
+        prompt.title = "Updated"
+        v2 = storage.create_prompt_version(prompt.id, prompt)
+        assert v2.version == 2
+
+    def test_clear_resets_version_metadata(self):
+        """storage.clear() wipes version metadata and version snapshots.
+
+        After a clear(), get_all_prompt_versions returns an empty list even
+        for a prompt ID that had versions before the clear.
+        """
+        storage = Storage()
+        prompt = Prompt(title="Test", content="Content")
+        storage.create_prompt(prompt)
+        storage.create_prompt_version(prompt.id, prompt)
+
+        storage.clear()
+
+        versions = storage.get_all_prompt_versions(prompt.id)
+        assert versions == []
+
+    def test_get_prompts_by_collection_and_by_collection_id_are_equivalent(self):
+        """Both get_prompts_by_collection and get_prompts_by_collection_id return the same data.
+
+        Note:
+            Two equivalent methods exist for this query. This test documents and
+            verifies that their results are identical.
+        """
+        storage = Storage()
+        collection = Collection(name="Test")
+        storage.create_collection(collection)
+
+        p1 = Prompt(title="P1", content="c", collection_id=collection.id)
+        p2 = Prompt(title="P2", content="c", collection_id=collection.id)
+        storage.create_prompt(p1)
+        storage.create_prompt(p2)
+
+        result_a = storage.get_prompts_by_collection(collection.id)
+        result_b = storage.get_prompts_by_collection_id(collection.id)
+
+        assert set(p.id for p in result_a) == set(p.id for p in result_b)
+        assert len(result_a) == len(result_b) == 2
+
+    def test_update_prompt_overwrites_id_on_input_object(self):
+        """update_prompt sets prompt.id = prompt_id on the passed object as a side-effect.
+
+        Note:
+            update_prompt mutates the input prompt object, setting its .id field
+            to the prompt_id argument. This means the caller's object is modified
+            in place and its original id is overwritten.
+        """
+        storage = Storage()
+        original = Prompt(title="Original", content="Content")
+        storage.create_prompt(original)
+
+        different_id_prompt = Prompt(title="Updated", content="Updated content")
+        original_different_id = different_id_prompt.id
+
+        storage.update_prompt(original.id, different_id_prompt)
+
+        assert different_id_prompt.id == original.id
+        assert different_id_prompt.id != original_different_id
+
+    def test_update_prompt_preserves_created_at_on_input_object(self):
+        """update_prompt sets prompt.created_at = original.created_at on the input object.
+
+        Note:
+            update_prompt preserves the original prompt's creation timestamp by
+            mutating the new prompt's .created_at field before storing it.
+        """
+        from datetime import datetime, timedelta, timezone
+        storage = Storage()
+        past_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=5)
+        original = Prompt(title="Original", content="Content", created_at=past_time)
+        storage.create_prompt(original)
+
+        new_prompt = Prompt(title="Updated", content="Updated content")
+
+        storage.update_prompt(original.id, new_prompt)
+
+        assert new_prompt.created_at == past_time
+
+    def test_get_all_prompt_versions_sorted_newest_first(self):
+        """get_all_prompt_versions returns versions sorted by version number descending."""
+        storage = Storage()
+        prompt = Prompt(title="Test", content="Content")
+        storage.create_prompt(prompt)
+
+        storage.create_prompt_version(prompt.id, prompt)
+        prompt.title = "V2"
+        storage.create_prompt_version(prompt.id, prompt)
+        prompt.title = "V3"
+        storage.create_prompt_version(prompt.id, prompt)
+
+        versions = storage.get_all_prompt_versions(prompt.id)
+        version_nums = [v.version for v in versions]
+        assert version_nums == sorted(version_nums, reverse=True)

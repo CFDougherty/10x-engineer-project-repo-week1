@@ -7,11 +7,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 class TestCollections:
-    """Tests for collection endpoints."""
+    """Tests for the /collections CRUD endpoints.
+
+    Covers creation, retrieval, update (PUT and PATCH), deletion, response
+    format validation, and cascading behaviour when a collection is removed.
+    """
 
     def test_create_collection(self, client: TestClient, sample_collection_data):
-        """Test the creation of a new collection."""
+        """Creating a new collection returns 201 with the expected fields.
 
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+        """
         response = client.post("/collections", json=sample_collection_data)
         assert response.status_code == 201
         data = response.json()
@@ -19,18 +27,30 @@ class TestCollections:
         assert "id" in data
 
     def test_create_collection_with_empty_name(self, client: TestClient):
-        """Test creating a collection with empty name."""
+        """Creating a collection with an empty name string must be rejected with 400.
+
+        Args:
+            client: TestClient instance for making API requests.
+        """
         response = client.post("/collections", json={"name": ""})
         assert response.status_code == 400
 
     def test_create_collection_with_very_long_name(self, client: TestClient):
-        """Test creating a collection with very long name."""
-        long_name = "A" * 101  # Exceeds 100 character limit
+        """Creating a collection whose name exceeds 100 characters must be rejected with 400.
+
+        Args:
+            client: TestClient instance for making API requests.
+        """
+        long_name = "A" * 101
         response = client.post("/collections", json={"name": long_name})
         assert response.status_code == 400
 
     def test_create_collection_with_special_characters(self, client: TestClient):
-        """Test creating a collection with special characters."""
+        """Creating a collection with special characters in the name and description is allowed.
+
+        Args:
+            client: TestClient instance for making API requests.
+        """
         special_data = {
             "name": "Test <script>alert('xss')</script>",
             "description": "Special chars: \n\t\r, quotes '\""
@@ -39,21 +59,29 @@ class TestCollections:
         assert response.status_code == 201
 
     def test_create_collection_with_null_values(self, client: TestClient):
-        """Test creating a collection with null values."""
+        """Creating a collection with a null name must be rejected with 400.
+
+        Args:
+            client: TestClient instance for making API requests.
+        """
         response = client.post("/collections", json={"name": None})
         assert response.status_code == 400
 
     def test_create_collection_missing_required_field(self, client: TestClient):
-        """Test creating a collection without name."""
+        """Creating a collection without the required name field must be rejected with 400.
+
+        Args:
+            client: TestClient instance for making API requests.
+        """
         response = client.post("/collections", json={"description": "Some description"})
         assert response.status_code == 400
 
     def test_list_collections(self, client: TestClient, sample_collection_data):
-        """Test listing collections by creating and retrieving a collection.
+        """Listing collections after creating one returns exactly one result.
 
         Args:
-            client: A test client for sending HTTP requests.
-            sample_collection_data: Sample data to be used for creating a collection.
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
         """
         client.post("/collections", json=sample_collection_data)
 
@@ -63,7 +91,11 @@ class TestCollections:
         assert len(data["collections"]) == 1
 
     def test_list_collections_empty(self, client: TestClient):
-        """Test listing collections when none exist."""
+        """Listing collections when none exist returns an empty list with total=0.
+
+        Args:
+            client: TestClient instance for making API requests.
+        """
         response = client.get("/collections")
         assert response.status_code == 200
         data = response.json()
@@ -71,25 +103,24 @@ class TestCollections:
         assert data["total"] == 0
 
     def test_get_collection_not_found(self, client: TestClient):
-        # The following function tests that retrieving a non-existent collection
-        # returns a 404 status code.
-
-        """
-        Test that retrieving a non-existent collection returns a 404 status code.
+        """Retrieving a non-existent collection by ID must return 404.
 
         Args:
-            client: TestClient used to send requests to the API.
+            client: TestClient instance for making API requests.
         """
         response = client.get("/collections/nonexistent-id")
         assert response.status_code == 404
 
     def test_update_collection(self, client: TestClient, sample_collection_data):
-        """Test updating an existing collection."""
-        # Create a collection first
+        """PUT /collections/{id} updates name and description of an existing collection.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+        """
         create_response = client.post("/collections", json=sample_collection_data)
         collection_id = create_response.json()["id"]
 
-        # Update it
         updated_data = {
             "name": "Updated Collection Name",
             "description": "Updated description for the collection"
@@ -102,28 +133,38 @@ class TestCollections:
         assert data["description"] == "Updated description for the collection"
 
     def test_update_collection_with_invalid_data(self, client: TestClient, sample_collection_data):
-        """Test updating a collection with invalid data."""
-        # Create a collection first
+        """PUT /collections/{id} with an empty name must be rejected with 400.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+        """
         create_response = client.post("/collections", json=sample_collection_data)
         collection_id = create_response.json()["id"]
 
-        # Try to update with empty name
         response = client.put(f"/collections/{collection_id}", json={"name": ""})
         assert response.status_code == 400
 
     def test_update_collection_not_found(self, client: TestClient):
-        """Test updating a non-existent collection."""
+        """PUT /collections/{id} on a non-existent ID must return 404.
+
+        Args:
+            client: TestClient instance for making API requests.
+        """
         response = client.put("/collections/nonexistent-id", json={"name": "New Name"})
         assert response.status_code == 404
 
     def test_patch_collection_partial_update(self, client: TestClient, sample_collection_data):
-        """Test partially updating a collection."""
-        # Create a collection first
+        """PATCH /collections/{id} updates only the supplied fields leaving others intact.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+        """
         create_response = client.post("/collections", json=sample_collection_data)
         collection_id = create_response.json()["id"]
         original_data = create_response.json()
 
-        # Partially update
         partial_update_data = {
             "name": "Partially Updated Name"
         }
@@ -132,156 +173,313 @@ class TestCollections:
         assert response.status_code == 200
         updated_data = response.json()
 
-        # Verify updated fields
         assert updated_data["name"] == partial_update_data["name"]
-
-        # Verify unchanged fields
         assert updated_data["description"] == original_data["description"]
 
     def test_patch_collection_non_existent(self, client: TestClient):
-        """Test patching a non-existent collection."""
+        """PATCH /collections/{id} on a non-existent ID must return 404.
+
+        Args:
+            client: TestClient instance for making API requests.
+        """
         response = client.patch("/collections/nonexistent-id", json={"name": "New Name"})
         assert response.status_code == 404
 
     def test_patch_collection_empty_payload(self, client: TestClient, sample_collection_data):
-        """Test patch request with empty payload."""
-        # Create a collection first
+        """PATCH /collections/{id} with an empty payload leaves the collection unchanged.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+        """
         create_response = client.post("/collections", json=sample_collection_data)
         collection_id = create_response.json()["id"]
         original_data = create_response.json()
 
-        # Patch with empty payload
         response = client.patch(f"/collections/{collection_id}", json={})
         assert response.status_code == 200
         unchanged_data = response.json()
 
-        # Verify the data remains unchanged
         assert unchanged_data == original_data
 
-    def test_delete_collection_with_prompts(self, client: TestClient, sample_collection_data, sample_prompt_data):
-        """Test the deletion of a collection with associated prompts.
+    def test_delete_collection_nonexistent(self, client: TestClient):
+        """Deleting a non-existent collection must return 404.
 
         Args:
-        client: The test client used to perform API requests.
-        sample_collection_data: The data for creating a sample collection.
-        sample_prompt_data: The data for creating a sample prompt.
-
-        NOTE: Bug #4 - prompts become orphaned after collection deletion.
-        This test documents the current (buggy) behavior.
-        After fixing, update the test to verify correct behavior.
+            client: TestClient instance for making API requests.
         """
-        # Create collection
-        col_response = client.post("/collections", json=sample_collection_data)
-        collection_id = col_response.json()["id"]
-
-        # Create prompt in collection
-        prompt_data = {**sample_prompt_data, "collection_id": collection_id}
-        prompt_response = client.post("/prompts", json=prompt_data)
-        prompt_id = prompt_response.json()["id"]
-
-        # Delete collection
-        client.delete(f"/collections/{collection_id}")
-
-        # The prompt still exists but has invalid collection_id
-        # This is Bug #4 - should be handled properly
-        prompts = client.get("/prompts").json()["prompts"]
-        if prompts:
-            # Prompt exists with orphaned collection_id
-            assert prompts[0]["collection_id"] == collection_id
-            # After fix, collection_id should be None or prompt should be deleted
-
-    def test_delete_collection_nonexistent(self, client: TestClient):
-        """Test deleting a non-existent collection."""
         response = client.delete("/collections/nonexistent-id")
         assert response.status_code == 404
 
     def test_delete_collection_twice(self, client: TestClient, sample_collection_data):
-        """Test deleting a collection twice."""
-        # Create collection
+        """Deleting a collection a second time must return 404 after the first deletion succeeds.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+        """
         col_response = client.post("/collections", json=sample_collection_data)
         collection_id = col_response.json()["id"]
 
-        # Delete it once
         response1 = client.delete(f"/collections/{collection_id}")
         assert response1.status_code == 204
 
-        # Try to delete it again
         response2 = client.delete(f"/collections/{collection_id}")
         assert response2.status_code == 404
 
     def test_delete_collection_also_deletes_prompts(self, client: TestClient, sample_collection_data, sample_prompt_data):
-        """Verify prompts are deleted when a collection is deleted.
+        """Deleting a collection must also delete all prompts that belong to it.
 
         Args:
             client: TestClient instance for API requests.
             sample_collection_data: Data used to create a test collection.
             sample_prompt_data: Data used to create a test prompt.
         """
-        # Create collection
         col_response = client.post("/collections", json=sample_collection_data)
         collection_id = col_response.json()["id"]
 
-        # Create prompt in collection
         prompt_data = {**sample_prompt_data, "collection_id": collection_id}
         client.post("/prompts", json=prompt_data)
 
-        # Delete collection
         client.delete(f"/collections/{collection_id}")
 
-        # Verify all prompts are deleted
         response = client.get("/prompts")
         assert response.json()["prompts"] == []
 
-    def test_delete_collection_sets_prompt_collection_id_to_none(self, client: TestClient, sample_collection_data, sample_prompt_data):
-        """Test collection deletion sets prompts' collection_id to None.
+    def test_collection_response_format(self, client: TestClient, sample_collection_data):
+        """GET /collections/{id} response must contain all required and optional fields.
 
         Args:
-            client: A test client instance for making HTTP requests.
-            sample_collection_data: Sample data for creating a collection.
-            sample_prompt_data: Sample data for creating a prompt.
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
         """
-        # Create collection
-        col_response = client.post("/collections", json=sample_collection_data)
-        collection_id = col_response.json()["id"]
-
-        # Create prompt in collection
-        prompt_data = {**sample_prompt_data, "collection_id": collection_id}
-        client.post("/prompts", json=prompt_data)
-
-        # Delete collection
-        client.delete(f"/collections/{collection_id}")
-
-        # Verify prompts collection_id is None
-        response = client.get("/prompts")
-        for prompt in response.json()["prompts"]:
-            assert prompt["collection_id"] is None
-
-    def test_collection_response_format(self, client: TestClient, sample_collection_data):
-        """Test that collection responses have consistent format."""
-        # Create collection
         create_response = client.post("/collections", json=sample_collection_data)
         collection_id = create_response.json()["id"]
 
-        # Get collection
         get_response = client.get(f"/collections/{collection_id}")
         data = get_response.json()
 
-        # Verify required fields
         required_fields = ["id", "name", "created_at"]
         for field in required_fields:
             assert field in data
 
-        # Verify optional fields
         optional_fields = ["description"]
         for field in optional_fields:
             assert field in data
 
     def test_collection_validation_consistency(self, client: TestClient):
-        """Test that collection validation rules are consistently applied."""
-        # Test name validation
+        """Validation rules for collection name are consistently enforced across requests.
+
+        Args:
+            client: TestClient instance for making API requests.
+        """
         response1 = client.post("/collections", json={"name": ""})
         assert response1.status_code == 400
 
-        # Test name length validation
         response2 = client.post("/collections", json={"name": "A" * 101})
         assert response2.status_code == 400
+
+    def test_put_collection_preserves_created_at(self, client: TestClient, sample_collection_data):
+        """PUT /collections/{id} must not change the original created_at timestamp.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+        """
+        create_resp = client.post("/collections", json=sample_collection_data)
+        collection_id = create_resp.json()["id"]
+        original_created_at = create_resp.json()["created_at"]
+
+        put_resp = client.put(
+            f"/collections/{collection_id}",
+            json={"name": "Renamed Collection", "description": "New desc"}
+        )
+        assert put_resp.status_code == 200
+        assert put_resp.json()["created_at"] == original_created_at
+
+    def test_patch_collection_preserves_created_at(self, client: TestClient, sample_collection_data):
+        """PATCH /collections/{id} must not change the original created_at timestamp.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+        """
+        create_resp = client.post("/collections", json=sample_collection_data)
+        collection_id = create_resp.json()["id"]
+        original_created_at = create_resp.json()["created_at"]
+
+        patch_resp = client.patch(f"/collections/{collection_id}", json={"name": "Patched Name"})
+        assert patch_resp.status_code == 200
+        assert patch_resp.json()["created_at"] == original_created_at
+
+    def test_put_collection_updates_existing_in_place(self, client: TestClient, sample_collection_data):
+        """PUT /collections/{id} must not create a duplicate — total count stays the same.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+        """
+        client.post("/collections", json=sample_collection_data)
+        collections_before = client.get("/collections").json()
+        count_before = collections_before["total"]
+        collection_id = collections_before["collections"][0]["id"]
+
+        client.put(f"/collections/{collection_id}", json={"name": "In-place Update"})
+
+        collections_after = client.get("/collections").json()
+        assert collections_after["total"] == count_before
+
+    def test_get_collection_response_includes_prompt_ids(self, client: TestClient, sample_collection_data):
+        """GET /collections/{id} response must include a prompt_ids list.
+
+        Note:
+            This is a known failing test — the API does not currently return
+            prompt_ids in the collection response body.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+        """
+        create_resp = client.post("/collections", json=sample_collection_data)
+        collection_id = create_resp.json()["id"]
+
+        resp = client.get(f"/collections/{collection_id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "prompt_ids" in data
+        assert isinstance(data["prompt_ids"], list)
+
+    def test_get_collections_list_each_has_prompt_ids(self, client: TestClient, sample_collection_data):
+        """GET /collections must include prompt_ids on every collection in the list.
+
+        Note:
+            This is a known failing test — the API does not currently return
+            prompt_ids in the collection list response.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+        """
+        client.post("/collections", json=sample_collection_data)
+        client.post("/collections", json={"name": "Second Collection"})
+
+        resp = client.get("/collections")
+        assert resp.status_code == 200
+        for collection in resp.json()["collections"]:
+            assert "prompt_ids" in collection
+            assert isinstance(collection["prompt_ids"], list)
+
+    def test_prompt_ids_updates_when_prompt_added_to_collection(
+        self, client: TestClient, sample_collection_data, sample_prompt_data
+    ):
+        """prompt_ids list should grow when a prompt is assigned to the collection.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+            sample_prompt_data: Fixture providing base prompt creation data.
+        """
+        col_resp = client.post("/collections", json=sample_collection_data)
+        collection_id = col_resp.json()["id"]
+
+        resp = client.get(f"/collections/{collection_id}")
+        assert resp.json()["prompt_ids"] == []
+
+        prompt_data = {**sample_prompt_data, "collection_id": collection_id}
+        prompt_resp = client.post("/prompts", json=prompt_data)
+        prompt_id = prompt_resp.json()["id"]
+
+        resp = client.get(f"/collections/{collection_id}")
+        assert prompt_id in resp.json()["prompt_ids"]
+        assert len(resp.json()["prompt_ids"]) == 1
+
+    def test_prompt_ids_updates_when_prompt_removed_from_collection(
+        self, client: TestClient, sample_collection_data, sample_prompt_data
+    ):
+        """prompt_ids list should shrink when an associated prompt is deleted.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+            sample_prompt_data: Fixture providing base prompt creation data.
+        """
+        col_resp = client.post("/collections", json=sample_collection_data)
+        collection_id = col_resp.json()["id"]
+
+        prompt_data = {**sample_prompt_data, "collection_id": collection_id}
+        prompt_resp = client.post("/prompts", json=prompt_data)
+        prompt_id = prompt_resp.json()["id"]
+
+        resp = client.get(f"/collections/{collection_id}")
+        assert prompt_id in resp.json()["prompt_ids"]
+
+        client.delete(f"/prompts/{prompt_id}")
+
+        resp = client.get(f"/collections/{collection_id}")
+        assert resp.json()["prompt_ids"] == []
+
+    def test_delete_collection_removes_all_10_associated_prompts(
+        self, client: TestClient, sample_collection_data, sample_prompt_data
+    ):
+        """Deleting a collection with 10 prompts must remove every one of them.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+            sample_prompt_data: Fixture providing base prompt creation data.
+        """
+        col_resp = client.post("/collections", json=sample_collection_data)
+        collection_id = col_resp.json()["id"]
+
+        for i in range(10):
+            prompt_data = {
+                **sample_prompt_data,
+                "title": f"Cascade Prompt {i}",
+                "collection_id": collection_id,
+            }
+            client.post("/prompts", json=prompt_data)
+
+        before = client.get("/prompts").json()
+        assert before["total"] == 10
+
+        del_resp = client.delete(f"/collections/{collection_id}")
+        assert del_resp.status_code == 204
+
+        after = client.get("/prompts").json()
+        assert after["total"] == 0
+        assert after["prompts"] == []
+
+    def test_delete_collection_prompt_count_excludes_other_collections(
+        self, client: TestClient, sample_collection_data, sample_prompt_data
+    ):
+        """After deleting one collection only that collection's prompts are removed.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+            sample_prompt_data: Fixture providing base prompt creation data.
+        """
+        col1_resp = client.post("/collections", json=sample_collection_data)
+        col1_id = col1_resp.json()["id"]
+
+        col2_resp = client.post("/collections", json={"name": "Keeper Collection"})
+        col2_id = col2_resp.json()["id"]
+
+        for i in range(3):
+            client.post("/prompts", json={
+                **sample_prompt_data,
+                "title": f"Col1 Prompt {i}",
+                "collection_id": col1_id,
+            })
+        for i in range(2):
+            client.post("/prompts", json={
+                **sample_prompt_data,
+                "title": f"Col2 Prompt {i}",
+                "collection_id": col2_id,
+            })
+
+        client.delete(f"/collections/{col1_id}")
+
+        remaining = client.get("/prompts").json()
+        assert remaining["total"] == 2
+        assert all(p["collection_id"] == col2_id for p in remaining["prompts"])
