@@ -42,18 +42,24 @@ export default function PromptsPage() {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(p => {
+        const collectionName = collections.find(c => c.id === p.collection_id)?.name?.toLowerCase() ?? '';
         if (filter === 'title') return p.title.toLowerCase().includes(q);
         if (filter === 'content') return p.content.toLowerCase().includes(q);
+        if (filter === 'description') return p.description?.toLowerCase().includes(q) ?? false;
+        if (filter === 'tags') return p.tags?.some((t: string) => t.toLowerCase().includes(q)) ?? false;
+        if (filter === 'collection') return collectionName.includes(q);
+        // 'all'
         return (
           p.title.toLowerCase().includes(q) ||
           p.content.toLowerCase().includes(q) ||
           p.description?.toLowerCase().includes(q) ||
-          p.tags?.some((t: string) => t.toLowerCase().includes(q))
+          p.tags?.some((t: string) => t.toLowerCase().includes(q)) ||
+          collectionName.includes(q)
         );
       });
     }
     return result;
-  }, [prompts, searchQuery, filter, selectedCollection]);
+  }, [prompts, searchQuery, filter, selectedCollection, collections]);
 
   const handleSearch = async () => {
     setSearchLoading(true);
