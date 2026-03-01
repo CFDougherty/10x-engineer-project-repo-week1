@@ -41,7 +41,7 @@ def filter_prompts_by_collection(prompts: List[Prompt], collection_id: str) -> L
     """
     return [p for p in prompts if p.collection_id == collection_id]
 
-def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True, search_field: Optional[str] = None) -> List[Prompt]:
+async def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True, search_field: Optional[str] = None) -> List[Prompt]:
     """Search prompts by title, content, description, tags, and collection.
 
     Uses fuzzysearch for real-time search with good performance.
@@ -80,7 +80,7 @@ def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True, search
 
     # Load collections once if needed — avoids a redundant storage call per prompt.
     needs_collection_lookup = 'collection' in fields_to_search
-    all_collections = storage.get_all_collections() if needs_collection_lookup else []
+    all_collections = await storage.get_all_collections() if needs_collection_lookup else []
 
     if not fuzzy:
         # Exact substring matching

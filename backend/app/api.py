@@ -23,6 +23,8 @@ Note:
 import random
 import uuid
 import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Body, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
@@ -41,10 +43,19 @@ from app.utils import sort_prompts_by_date, filter_prompts_by_collection, search
 from app import __version__
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Initialize the database on startup."""
+    from app.database import init_db
+    await init_db()
+    yield
+
+
 app = FastAPI(
     title="PromptLab API",
     description="AI Prompt Engineering Platform",
-    version=__version__
+    version=__version__,
+    lifespan=lifespan,
 )
 
 # CORS middleware
@@ -88,7 +99,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 # ============== Helpers ==============
 
-def _get_collection_with_prompt_ids(collection: Collection) -> Collection:
+async def _get_collection_with_prompt_ids(collection: Collection) -> Collection:
     """Return a copy of ``collection`` with ``prompt_ids`` populated from storage.
 
     Looks up all prompts whose ``collection_id`` matches ``collection.id`` and
@@ -103,7 +114,7 @@ def _get_collection_with_prompt_ids(collection: Collection) -> Collection:
         but with ``prompt_ids`` set to the list of prompt IDs currently
         associated with it.
     """
-    prompts = storage.get_prompts_by_collection_id(collection.id)
+    prompts = await storage.get_prompts_by_collection_id(collection.id)
     return Collection(
         id=collection.id,
         name=collection.name,
@@ -116,7 +127,7 @@ def _get_collection_with_prompt_ids(collection: Collection) -> Collection:
 # ============== Health Check ==============
 
 @app.get("/health", response_model=HealthResponse)
-def health_check():
+async def health_check():
     """Returns the service health status and the running application version.
 
     This endpoint is intended for use by load balancers, orchestration systems,
@@ -135,7 +146,7 @@ def health_check():
 # ============== Prompt Endpoints ==============
 
 @app.get("/prompts", response_model=PromptList)
-def list_prompts(
+async def list_prompts(
     collection_id: Optional[str] = None,
     search: Optional[str] = None,
     filter: Optional[str] = None,  # 'title', 'description', 'tags', 'collection', or 'all'
@@ -164,7 +175,7 @@ def list_prompts(
         A `PromptList` containing the resulting list of prompts and the total
         number of prompts returned.
     """
-    all_prompts = storage.get_all_prompts()
+    all_prompts = await storage.get_all_prompts()
 
     # Filter by collection if specified
     if collection_id:
@@ -177,7 +188,7 @@ def list_prompts(
         search_filter = filter if filter is not None else 'all'
 
         # Use search_prompts for all filter types to ensure consistent behavior
-        all_prompts = search_prompts(all_prompts, search, fuzzy=fuzzy, search_field=search_filter)
+        all_prompts = await search_prompts(all_prompts, search, fuzzy=fuzzy, search_field=search_filter)
 
     # Sort by date (newest first)
     all_prompts = sort_prompts_by_date(all_prompts, descending=True)
@@ -195,7 +206,7 @@ def list_prompts(
 
 
 @app.get("/prompts/{prompt_id}", response_model=Prompt)
-def get_prompt(prompt_id: str):
+async def get_prompt(prompt_id: str):
     """Retrieves a prompt by its unique identifier.
 
     Args:
@@ -208,7 +219,7 @@ def get_prompt(prompt_id: str):
         HTTPException: Raised with status code 404 if no prompt exists for the
             given ``prompt_id``.
     """
-    prompt = storage.get_prompt(prompt_id)
+    prompt = await storage.get_prompt(prompt_id)
 
     if prompt is None:
         raise HTTPException(status_code=404, detail="Prompt not found")
@@ -217,7 +228,7 @@ def get_prompt(prompt_id: str):
 
 
 @app.post("/prompts", response_model=Prompt, status_code=201)
-def create_prompt(prompt_data: PromptCreate):
+async def create_prompt(prompt_data: PromptCreate):
     """Creates a new prompt and persists it to storage.
 
     If `prompt_data.collection_id` is provided, this endpoint validates that the
@@ -240,21 +251,21 @@ def create_prompt(prompt_data: PromptCreate):
     """
     # Validate collection exists if provided
     if prompt_data.collection_id:
-        collection = storage.get_collection(prompt_data.collection_id)
+        collection = await storage.get_collection(prompt_data.collection_id)
         if not collection:
             raise HTTPException(status_code=400, detail="Collection not found")
 
     prompt = Prompt(**prompt_data.model_dump())
-    created_prompt = storage.create_prompt(prompt)
+    created_prompt = await storage.create_prompt(prompt)
 
     # Create version 1
-    storage.create_prompt_version(prompt.id, prompt)
+    await storage.create_prompt_version(prompt.id, prompt)
 
     return created_prompt
 
 
 @app.put("/prompts/{prompt_id}", response_model=Prompt)
-def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
+async def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
     """Update an existing prompt.
 
     Retrieves the prompt identified by ``prompt_id`` and replaces its mutable fields
@@ -276,13 +287,13 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
         HTTPException: If ``prompt_data.collection_id`` is provided but does not
             correspond to an existing collection (400).
     """
-    existing = storage.get_prompt(prompt_id)
+    existing = await storage.get_prompt(prompt_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Prompt not found")
 
     # Validate collection if provided
     if prompt_data.collection_id:
-        collection = storage.get_collection(prompt_data.collection_id)
+        collection = await storage.get_collection(prompt_data.collection_id)
         if not collection:
             raise HTTPException(status_code=400, detail="Collection not found")
 
@@ -297,17 +308,17 @@ def update_prompt(prompt_id: str, prompt_data: PromptUpdate):
         updated_at=get_current_time()
     )
 
-    result = storage.update_prompt(prompt_id, updated_prompt)
+    result = await storage.update_prompt(prompt_id, updated_prompt)
 
     # Create new version
     if result:
-        storage.create_prompt_version(prompt_id, result)
+        await storage.create_prompt_version(prompt_id, result)
 
     return result
 
 
 @app.patch("/prompts/{prompt_id}", response_model=Prompt)
-def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(...)):
+async def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(...)):
     """Partially updates an existing prompt.
 
     This endpoint applies a partial update (PATCH semantics) to the prompt
@@ -329,13 +340,13 @@ def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(...)):
         HTTPException: If the prompt does not exist (404), or if a provided
             `collection_id` does not correspond to an existing collection (400).
     """
-    existing = storage.get_prompt(prompt_id)
+    existing = await storage.get_prompt(prompt_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Prompt not found")
 
     # Validate new collection_id
     if prompt_data.collection_id:
-        collection = storage.get_collection(prompt_data.collection_id)
+        collection = await storage.get_collection(prompt_data.collection_id)
         if not collection:
             raise HTTPException(status_code=400, detail="Collection not found")
 
@@ -362,17 +373,17 @@ def patch_prompt(prompt_id: str, prompt_data: PromptUpdateOptional = Body(...)):
     updated_prompt.created_at = existing.created_at
     updated_prompt.updated_at = get_current_time()  # Update timestamp only if changes are made
 
-    result = storage.update_prompt(prompt_id, updated_prompt)
+    result = await storage.update_prompt(prompt_id, updated_prompt)
 
     # Create new version if changes were made
     if result:
-        storage.create_prompt_version(prompt_id, result)
+        await storage.create_prompt_version(prompt_id, result)
 
     return result
 
 
 @app.delete("/prompts/{prompt_id}", status_code=204)
-def delete_prompt(prompt_id: str):
+async def delete_prompt(prompt_id: str):
     """Deletes a prompt by its ID.
 
     This endpoint deletes the prompt identified by `prompt_id`. If no prompt with
@@ -387,7 +398,7 @@ def delete_prompt(prompt_id: str):
     Raises:
         HTTPException: If the prompt does not exist (HTTP 404, "Prompt not found").
     """
-    if not storage.delete_prompt(prompt_id):
+    if not await storage.delete_prompt(prompt_id):
         raise HTTPException(status_code=404, detail="Prompt not found")
     return None
 
@@ -395,7 +406,7 @@ def delete_prompt(prompt_id: str):
 # ============== Collection Endpoints ==============
 
 @app.get("/collections", response_model=CollectionList)
-def list_collections():
+async def list_collections():
     """Lists all collections.
 
     Retrieves all collections from storage and returns them along with the total
@@ -407,13 +418,13 @@ def list_collections():
             - collections: The list of all collections with ``prompt_ids`` populated.
             - total: The total number of collections returned.
     """
-    collections = storage.get_all_collections()
-    enriched = [_get_collection_with_prompt_ids(c) for c in collections]
+    collections = await storage.get_all_collections()
+    enriched = [await _get_collection_with_prompt_ids(c) for c in collections]
     return CollectionList(collections=enriched, total=len(enriched))
 
 
 @app.get("/collections/{collection_id}", response_model=Collection)
-def get_collection(collection_id: str):
+async def get_collection(collection_id: str):
     """Retrieves a collection by its ID.
 
     Looks up the collection in storage using the provided identifier and returns
@@ -429,15 +440,15 @@ def get_collection(collection_id: str):
     Raises:
         HTTPException: If the collection is not found (HTTP 404).
     """
-    collection = storage.get_collection(collection_id)
+    collection = await storage.get_collection(collection_id)
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
 
-    return _get_collection_with_prompt_ids(collection)
+    return await _get_collection_with_prompt_ids(collection)
 
 
 @app.post("/collections", response_model=Collection, status_code=201)
-def create_collection(collection_data: CollectionCreate):
+async def create_collection(collection_data: CollectionCreate):
     """Creates a new collection.
 
     Constructs a `Collection` model instance from the incoming request payload
@@ -452,11 +463,11 @@ def create_collection(collection_data: CollectionCreate):
             layer.
     """
     collection = Collection(**collection_data.model_dump())
-    return storage.create_collection(collection)
+    return await storage.create_collection(collection)
 
 
 @app.put("/collections/{collection_id}", response_model=Collection)
-def update_collection(collection_id: str, collection_data: CollectionCreate):
+async def update_collection(collection_id: str, collection_data: CollectionCreate):
     """Update an existing collection.
 
     Retrieves the collection identified by ``collection_id`` and replaces its fields
@@ -473,7 +484,7 @@ def update_collection(collection_id: str, collection_data: CollectionCreate):
     Raises:
         HTTPException: If no collection exists for ``collection_id`` (404).
     """
-    existing = storage.get_collection(collection_id)
+    existing = await storage.get_collection(collection_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Collection not found")
 
@@ -484,11 +495,11 @@ def update_collection(collection_id: str, collection_data: CollectionCreate):
         created_at=existing.created_at
     )
 
-    result = storage.update_collection(collection_id, updated_collection)
+    result = await storage.update_collection(collection_id, updated_collection)
     return result
 
 @app.patch("/collections/{collection_id}", response_model=Collection)
-def patch_collection(collection_id: str, collection_data: CollectionUpdateOptional = Body(...)):
+async def patch_collection(collection_id: str, collection_data: CollectionUpdateOptional = Body(...)):
     """Partially updates an existing collection.
 
     This endpoint applies a partial update (PATCH semantics) to the collection
@@ -507,7 +518,7 @@ def patch_collection(collection_id: str, collection_data: CollectionUpdateOption
     Raises:
         HTTPException: If the collection does not exist (404).
     """
-    existing = storage.get_collection(collection_id)
+    existing = await storage.get_collection(collection_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Collection not found")
 
@@ -524,11 +535,11 @@ def patch_collection(collection_id: str, collection_data: CollectionUpdateOption
         created_at=existing.created_at
     )
 
-    result = storage.update_collection(collection_id, updated_collection)
+    result = await storage.update_collection(collection_id, updated_collection)
     return result
 
 @app.delete("/collections/{collection_id}", status_code=204)
-def delete_collection(collection_id: str):
+async def delete_collection(collection_id: str):
     """Deletes a collection and all prompts associated with it.
 
     This endpoint removes every prompt that belongs to the specified collection,
@@ -546,13 +557,13 @@ def delete_collection(collection_id: str):
         on success.
     """
     # Retrieve prompts in the collection
-    prompts = storage.get_prompts_by_collection_id(collection_id)
+    prompts = await storage.get_prompts_by_collection_id(collection_id)
 
     # Delete each prompt within the collection
     for prompt in prompts:
-        storage.delete_prompt(prompt.id)
+        await storage.delete_prompt(prompt.id)
 
-    if not storage.delete_collection(collection_id):
+    if not await storage.delete_collection(collection_id):
         raise HTTPException(status_code=404, detail="Collection not found")
 
     return None
@@ -624,7 +635,7 @@ async def populate_test_data():
     """
     try:
         # Clear existing data first
-        storage.clear()
+        await storage.clear()
 
         # Define prompt topics
         prompt_topics = [
@@ -752,8 +763,8 @@ async def populate_test_data():
                 description=description,
                 tags=list(set(tags))  # Remove duplicates
             )
-            storage.create_prompt(prompt_obj)
-            storage.create_prompt_version(prompt_obj.id, prompt_obj)
+            await storage.create_prompt(prompt_obj)
+            await storage.create_prompt_version(prompt_obj.id, prompt_obj)
             created_prompts.append(prompt_obj)
 
         # Generate collections
@@ -770,7 +781,7 @@ async def populate_test_data():
                 name=name,
                 description=description
             )
-            storage.create_collection(collection_obj)
+            await storage.create_collection(collection_obj)
             created_collections.append(collection_obj)
 
         # Randomly assign prompts to collections
@@ -778,7 +789,7 @@ async def populate_test_data():
             if random.random() < 0.6 and created_collections:  # 60% chance
                 collection = random.choice(created_collections)
                 prompt.collection_id = collection.id
-                storage.update_prompt(prompt.id, prompt)
+                await storage.update_prompt(prompt.id, prompt)
 
         # Notify clients about data change
         await notify_sse_clients('{"event": "data_changed", "message": "Test data populated", "action": "populate"}')
@@ -812,11 +823,11 @@ async def clear_all_data():
     """
     try:
         # Count items before clearing
-        prompts_before = len(storage.get_all_prompts())
-        collections_before = len(storage.get_all_collections())
+        prompts_before = len(await storage.get_all_prompts())
+        collections_before = len(await storage.get_all_collections())
 
         # Clear all data
-        storage.clear()
+        await storage.clear()
 
         # Notify clients about data change
         await notify_sse_clients('{"event": "data_changed", "message": "All data cleared", "action": "clear"}')
@@ -837,7 +848,7 @@ async def clear_all_data():
 # ============== Versioning Endpoints ==============
 
 @app.get("/prompts/{prompt_id}/versions", response_model=VersionList)
-def list_prompt_versions(prompt_id: str):
+async def list_prompt_versions(prompt_id: str):
     """List all versions of a prompt.
 
     Retrieves all versions of the specified prompt, sorted by version number
@@ -852,11 +863,11 @@ def list_prompt_versions(prompt_id: str):
     Raises:
         HTTPException: If the prompt does not exist (404).
     """
-    prompt = storage.get_prompt(prompt_id)
+    prompt = await storage.get_prompt(prompt_id)
     if not prompt:
         raise HTTPException(status_code=404, detail="Prompt not found")
 
-    versions = storage.get_all_prompt_versions(prompt_id)
+    versions = await storage.get_all_prompt_versions(prompt_id)
 
     # Create version summaries
     version_summaries = [
@@ -876,7 +887,7 @@ def list_prompt_versions(prompt_id: str):
     )
 
 @app.get("/prompts/{prompt_id}/versions/{version}", response_model=PromptVersion)
-def get_prompt_version(prompt_id: str, version: int):
+async def get_prompt_version(prompt_id: str, version: int):
     """Get a specific version of a prompt.
 
     Retrieves the specified version of a prompt as an immutable snapshot.
@@ -891,18 +902,18 @@ def get_prompt_version(prompt_id: str, version: int):
     Raises:
         HTTPException: If the prompt or version does not exist (404).
     """
-    prompt = storage.get_prompt(prompt_id)
+    prompt = await storage.get_prompt(prompt_id)
     if not prompt:
         raise HTTPException(status_code=404, detail="Prompt not found")
 
-    version_data = storage.get_prompt_version(prompt_id, version)
+    version_data = await storage.get_prompt_version(prompt_id, version)
     if not version_data:
         raise HTTPException(status_code=404, detail="Version not found")
 
     return version_data
 
 @app.post("/prompts/{prompt_id}/versions/{version}/promote", response_model=Prompt, status_code=201)
-def promote_prompt_version(prompt_id: str, version: int):
+async def promote_prompt_version(prompt_id: str, version: int):
     """Promote an old version to become the new latest version.
 
     Creates a new version that is a copy of the specified old version, making it
@@ -918,11 +929,11 @@ def promote_prompt_version(prompt_id: str, version: int):
     Raises:
         HTTPException: If the prompt or version does not exist (404).
     """
-    prompt = storage.get_prompt(prompt_id)
+    prompt = await storage.get_prompt(prompt_id)
     if not prompt:
         raise HTTPException(status_code=404, detail="Prompt not found")
 
-    promoted_prompt = storage.promote_prompt_version(prompt_id, version)
+    promoted_prompt = await storage.promote_prompt_version(prompt_id, version)
     if not promoted_prompt:
         raise HTTPException(status_code=404, detail="Version not found")
 

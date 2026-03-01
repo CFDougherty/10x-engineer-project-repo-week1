@@ -1,7 +1,14 @@
 fastapi==0.109.0
 uvicorn==0.27.0
 pydantic==2.5.3
+pydantic-settings==2.1.0
 pytest==7.4.4
 pytest-cov==4.1.0
+pytest-asyncio==0.23.5
+anyio[trio]==4.2.0
 httpx==0.26.0
 fuzzysearch==0.8.1
+sqlalchemy[asyncio]==2.0.25
+asyncpg==0.29.0
+alembic==1.13.1
+pgvector==0.2.4
