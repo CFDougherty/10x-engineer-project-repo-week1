@@ -898,3 +898,19 @@ class TestVersioningStorage:
         versions = storage.get_all_prompt_versions(prompt.id)
         version_nums = [v.version for v in versions]
         assert version_nums == sorted(version_nums, reverse=True)
+
+    def test_update_prompt_returns_none_for_missing_id(self):
+        """update_prompt must return None when the prompt_id is not in storage."""
+        s = Storage()
+        placeholder = Prompt(title="Ghost", content="Nowhere")
+        result = s.update_prompt("nonexistent-id", placeholder)
+        assert result is None
+
+    def test_get_prompt_version_returns_none_when_prompt_has_no_versions(self):
+        """get_prompt_version must return None when the prompt has no version history."""
+        s = Storage()
+        prompt = Prompt(title="Unversioned", content="Content")
+        s.create_prompt(prompt)
+        # Never called create_prompt_version, so prompt_id not in _prompt_versions
+        result = s.get_prompt_version(prompt.id, 1)
+        assert result is None

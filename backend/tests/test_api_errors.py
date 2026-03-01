@@ -208,3 +208,36 @@ class TestHTTPMethodBehavior:
             "content": "malicious",
         })
         assert resp.status_code == 400
+
+    def test_put_prompt_not_found_returns_404(self, client: TestClient):
+        """PUT /prompts/{id} for a non-existent prompt ID must return 404.
+
+        Args:
+            client: TestClient instance for making API requests.
+        """
+        resp = client.put("/prompts/nonexistent-id", json={"title": "New", "content": "Content"})
+        assert resp.status_code == 404
+
+    def test_put_prompt_invalid_collection_id_returns_400(self, client: TestClient):
+        """PUT /prompts/{id} with a collection_id that does not exist must return 400.
+
+        Args:
+            client: TestClient instance for making API requests.
+        """
+        create_resp = client.post("/prompts", json={"title": "Original", "content": "Content"})
+        prompt_id = create_resp.json()["id"]
+
+        resp = client.put(
+            f"/prompts/{prompt_id}",
+            json={"title": "Updated", "content": "Content", "collection_id": "nonexistent-collection"},
+        )
+        assert resp.status_code == 400
+
+    def test_get_specific_version_prompt_not_found_returns_404(self, client: TestClient):
+        """GET /prompts/{id}/versions/{v} for a non-existent prompt must return 404.
+
+        Args:
+            client: TestClient instance for making API requests.
+        """
+        resp = client.get("/prompts/nonexistent-id/versions/1")
+        assert resp.status_code == 404

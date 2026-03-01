@@ -522,3 +522,47 @@ class TestContentValidationDiscrepancy:
         from app.utils import validate_prompt_content
         assert validate_prompt_content("123456789") == False
         assert validate_prompt_content("1234567890") == True
+
+
+class TestSanitizeTextHelper:
+    """Tests for the sanitize_text helper function."""
+
+    def test_sanitize_text_non_string_passthrough(self):
+        """sanitize_text must return non-string values unchanged (no html.escape call)."""
+        from app.models import sanitize_html
+        # sanitize_html delegates to sanitize_text; pass an integer to hit the
+        # `if not isinstance(text, str): return text` branch (models.py line 20).
+        result = sanitize_html(42)
+        assert result == 42
+
+        result_none = sanitize_html(None)
+        assert result_none is None
+
+
+class TestPromptEqualityEdgeCases:
+    """Tests for Prompt.__eq__ and Prompt.__setattr__ edge cases."""
+
+    def test_prompt_not_equal_to_non_prompt(self):
+        """Prompt.__eq__ must return False when compared to a non-Prompt object."""
+        p = Prompt(title="Test", content="Content")
+        assert p != "not a prompt"
+        assert p != 42
+        assert p != None
+
+    def test_prompt_setattr_same_value_does_not_update_timestamp(self):
+        """Setting a field to its current value must not change updated_at."""
+        p = Prompt(title="Test", content="Content")
+        original_updated_at = p.updated_at
+        p.title = p.title  # same value — triggers the else branch in __setattr__
+        assert p.updated_at == original_updated_at
+
+
+class TestCollectionEqualityEdgeCases:
+    """Tests for Collection.__eq__ edge cases."""
+
+    def test_collection_not_equal_to_non_collection(self):
+        """Collection.__eq__ must return False when compared to a non-Collection object."""
+        c = Collection(name="Test")
+        assert c != "not a collection"
+        assert c != 42
+        assert c != None

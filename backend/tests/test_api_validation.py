@@ -72,6 +72,18 @@ class TestDataValidation:
         })
         assert response.status_code == 201
 
+    def test_create_collection_whitespace_only_name_returns_400(self, client: TestClient):
+        """A collection name composed entirely of spaces must be rejected with 400.
+
+        CollectionBase does not strip whitespace, so "   " passes min_length=1 but
+        validate_non_whitespace_name catches it and raises ValueError.
+
+        Args:
+            client: TestClient instance for making API requests.
+        """
+        response = client.post("/collections", json={"name": "   "})
+        assert response.status_code == 400
+
 class TestAPIContract:
     """API contract consistency tests for prompt and collection endpoints."""
 

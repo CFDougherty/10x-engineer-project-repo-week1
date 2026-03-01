@@ -886,6 +886,20 @@ class TestFuzzySearchEdgeCases:
         assert len(results) == 1
         assert "python" in results[0].tags
 
+    def test_exact_search_description_only_match(self):
+        """Exact search must return a prompt matched only via description (utils.py line 89).
+
+        The query must not appear in title or content so that only the description
+        branch is hit during non-fuzzy search.
+        """
+        prompts = [
+            Prompt(title="Alpha Title", content="alpha content", description="unique-desc-term"),
+            Prompt(title="Beta Title", content="beta content", description=None),
+        ]
+        results = search_prompts(prompts, "unique-desc-term", fuzzy=False, search_field="all")
+        assert len(results) == 1
+        assert results[0].description == "unique-desc-term"
+
 
 if __name__ == "__main__":
     pytest.main()

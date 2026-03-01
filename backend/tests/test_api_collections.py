@@ -483,3 +483,23 @@ class TestCollections:
         remaining = client.get("/prompts").json()
         assert remaining["total"] == 2
         assert all(p["collection_id"] == col2_id for p in remaining["prompts"])
+
+    def test_patch_collection_with_empty_string_name_normalized(
+        self, client: TestClient, sample_collection_data
+    ):
+        """PATCH /collections/{id} with name="" must normalize to None and leave name unchanged.
+
+        CollectionUpdateOptional.check_empty_values converts "" to None before validation,
+        so the existing name is preserved.
+
+        Args:
+            client: TestClient instance for making API requests.
+            sample_collection_data: Fixture providing base collection creation data.
+        """
+        create_resp = client.post("/collections", json=sample_collection_data)
+        collection_id = create_resp.json()["id"]
+        original_name = create_resp.json()["name"]
+
+        patch_resp = client.patch(f"/collections/{collection_id}", json={"name": ""})
+        assert patch_resp.status_code == 200
+        assert patch_resp.json()["name"] == original_name

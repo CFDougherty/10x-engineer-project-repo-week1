@@ -1,6 +1,7 @@
 """Tests for admin API endpoints."""
 
 import pytest
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from app.api import app
 from app.storage import storage
@@ -128,3 +129,26 @@ def test_populate_test_data_all_prompts_have_versions():
             f"Prompt {prompt.id!r} ({prompt.title!r}) has no version snapshots. "
             "populate-test-data must call create_prompt_version for every prompt it creates."
         )
+
+
+def test_populate_test_data_storage_exception_returns_500():
+    """populate-test-data must return 500 when storage raises an unexpected exception.
+
+    Uses mock to force storage.create_collection to raise, triggering the except block.
+    """
+    storage.clear()
+    with patch.object(storage, "create_collection", side_effect=RuntimeError("boom")):
+        response = client.post("/admin/populate-test-data")
+    assert response.status_code == 500
+    assert "Failed to populate test data" in response.json()["detail"]
+
+
+def test_clear_all_data_storage_exception_returns_500():
+    """clear-all-data must return 500 when storage raises an unexpected exception.
+
+    Uses mock to force storage.clear to raise, triggering the except block.
+    """
+    with patch.object(storage, "clear", side_effect=RuntimeError("boom")):
+        response = client.delete("/admin/clear-all-data")
+    assert response.status_code == 500
+    assert "Failed to clear data" in response.json()["detail"]
