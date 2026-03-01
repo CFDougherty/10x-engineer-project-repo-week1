@@ -10,28 +10,27 @@ the application instance to control how browsers handle cross-origin requests.
 
 The current configuration is fully permissive:
 - Allows requests from any origin (``allow_origins=["*"]``).
-- Allows cookies/authorization headers to be included (``allow_credentials=True``).
 - Allows all HTTP methods and headers (``allow_methods=["*"]``,
   ``allow_headers=["*"]``).
 
 Note:
-    Using ``allow_origins=["*"]`` together with ``allow_credentials=True`` is not
-    valid under the CORS specification for credentialed browser requests; browsers
-    will typically reject such responses unless a specific origin is echoed back.
-    Prefer explicitly listing allowed origins when credentials are required.
+    ``allow_credentials=True`` is intentionally omitted. Combining it with
+    ``allow_origins=["*"]`` is invalid under the CORS specification and is
+    rejected by browsers. The frontend does not send cookies or authorization
+    headers, so credentials support is not required.
 """
 
+import random
+import uuid
+import asyncio
 from fastapi import FastAPI, HTTPException, Body, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
 from typing import Optional
-import uuid
-import asyncio
-from app.models import Prompt, PromptUpdateOptional
 
 from app.models import (
-    Prompt, PromptCreate, PromptUpdate,
+    Prompt, PromptCreate, PromptUpdate, PromptUpdateOptional,
     Collection, CollectionCreate, CollectionUpdateOptional,
     PromptList, CollectionList, HealthResponse,
     get_current_time,
@@ -52,7 +51,6 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -85,6 +83,33 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
+    )
+
+
+# ============== Helpers ==============
+
+def _get_collection_with_prompt_ids(collection: Collection) -> Collection:
+    """Return a copy of ``collection`` with ``prompt_ids`` populated from storage.
+
+    Looks up all prompts whose ``collection_id`` matches ``collection.id`` and
+    injects their IDs into the returned ``Collection`` instance. The original
+    object is not mutated.
+
+    Args:
+        collection: The collection to enrich with prompt IDs.
+
+    Returns:
+        A new :class:`app.models.Collection` instance identical to ``collection``
+        but with ``prompt_ids`` set to the list of prompt IDs currently
+        associated with it.
+    """
+    prompts = storage.get_prompts_by_collection_id(collection.id)
+    return Collection(
+        id=collection.id,
+        name=collection.name,
+        description=collection.description,
+        created_at=collection.created_at,
+        prompt_ids=[p.id for p in prompts],
     )
 
 
@@ -184,10 +209,10 @@ def get_prompt(prompt_id: str):
             given ``prompt_id``.
     """
     prompt = storage.get_prompt(prompt_id)
-    
+
     if prompt is None:
         raise HTTPException(status_code=404, detail="Prompt not found")
-    
+
     return prompt
 
 
@@ -374,31 +399,17 @@ def list_collections():
     """Lists all collections.
 
     Retrieves all collections from storage and returns them along with the total
-    number of collections.
+    number of collections. Each collection includes a ``prompt_ids`` field
+    containing the IDs of all prompts currently associated with it.
 
     Returns:
         CollectionList: Response object containing:
-            - collections: The list of all collections.
+            - collections: The list of all collections with ``prompt_ids`` populated.
             - total: The total number of collections returned.
     """
     collections = storage.get_all_collections()
-
-    # Update each collection with its prompt_ids
-    updated_collections = []
-    for collection in collections:
-        prompts = storage.get_prompts_by_collection_id(collection.id)
-        prompt_ids = [p.id for p in prompts]
-
-        updated_collection = Collection(
-            id=collection.id,
-            name=collection.name,
-            description=collection.description,
-            created_at=collection.created_at,
-            prompt_ids=prompt_ids
-        )
-        updated_collections.append(updated_collection)
-
-    return CollectionList(collections=updated_collections, total=len(updated_collections))
+    enriched = [_get_collection_with_prompt_ids(c) for c in collections]
+    return CollectionList(collections=enriched, total=len(enriched))
 
 
 @app.get("/collections/{collection_id}", response_model=Collection)
@@ -406,13 +417,14 @@ def get_collection(collection_id: str):
     """Retrieves a collection by its ID.
 
     Looks up the collection in storage using the provided identifier and returns
-    it if found. If no matching collection exists, raises an HTTP 404 error.
+    it if found, with ``prompt_ids`` populated from the current prompt set.
+    If no matching collection exists, raises an HTTP 404 error.
 
     Args:
         collection_id (str): The ID of the collection to retrieve.
 
     Returns:
-        Collection: The requested collection.
+        Collection: The requested collection with ``prompt_ids`` populated.
 
     Raises:
         HTTPException: If the collection is not found (HTTP 404).
@@ -421,18 +433,7 @@ def get_collection(collection_id: str):
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
 
-    # Get all prompts in this collection
-    prompts = storage.get_prompts_by_collection_id(collection_id)
-    prompt_ids = [p.id for p in prompts]
-
-    # Return collection with updated prompt_ids
-    return Collection(
-        id=collection.id,
-        name=collection.name,
-        description=collection.description,
-        created_at=collection.created_at,
-        prompt_ids=prompt_ids
-    )
+    return _get_collection_with_prompt_ids(collection)
 
 
 @app.post("/collections", response_model=Collection, status_code=201)
@@ -459,7 +460,8 @@ def update_collection(collection_id: str, collection_data: CollectionCreate):
     """Update an existing collection.
 
     Retrieves the collection identified by ``collection_id`` and replaces its fields
-    with the values provided in ``collection_data``.
+    with the values provided in ``collection_data``. The original ``created_at``
+    timestamp is preserved.
 
     Args:
         collection_id: The unique identifier of the collection to update.
@@ -482,7 +484,7 @@ def update_collection(collection_id: str, collection_data: CollectionCreate):
         created_at=existing.created_at
     )
 
-    result = storage.create_collection(updated_collection)
+    result = storage.update_collection(collection_id, updated_collection)
     return result
 
 @app.patch("/collections/{collection_id}", response_model=Collection)
@@ -522,7 +524,7 @@ def patch_collection(collection_id: str, collection_data: CollectionUpdateOption
         created_at=existing.created_at
     )
 
-    result = storage.create_collection(updated_collection)
+    result = storage.update_collection(collection_id, updated_collection)
     return result
 
 @app.delete("/collections/{collection_id}", status_code=204)
@@ -671,7 +673,6 @@ async def populate_test_data():
         ]
 
         # Generate prompts
-        import random
         random.seed(42)  # For reproducible results
 
         created_prompts = []
@@ -744,7 +745,6 @@ async def populate_test_data():
                     tags.append(new_tag)
 
             # Create prompt
-            from app.models import Prompt
             prompt_obj = Prompt(
                 id=str(uuid.uuid4()),
                 title=title,
@@ -765,7 +765,6 @@ async def populate_test_data():
                 f"These templates help standardize and improve your work in this area."
             )
 
-            from app.models import Collection
             collection_obj = Collection(
                 id=str(uuid.uuid4()),
                 name=name,

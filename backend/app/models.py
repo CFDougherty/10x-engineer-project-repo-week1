@@ -1,6 +1,6 @@
 """Pydantic models for PromptLab."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from uuid import uuid4, UUID
@@ -36,7 +36,6 @@ def get_current_time() -> datetime:
     Returns:
         datetime: The current time in UTC (naive).
     """
-    from datetime import timezone
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 # ============== Prompt Models ==============

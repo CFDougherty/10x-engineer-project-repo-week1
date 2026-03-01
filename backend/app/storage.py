@@ -5,7 +5,7 @@ In a production environment, this would be replaced with a database.
 """
 
 from typing import Dict, List, Optional
-from app.models import Prompt, Collection, PromptVersion, PromptMeta, VersionSummary
+from app.models import Prompt, Collection, PromptVersion, PromptMeta
 
 
 class Storage:
@@ -233,6 +233,26 @@ class Storage:
             return True
         return False
     
+    def update_collection(self, collection_id: str, collection: Collection) -> Optional[Collection]:
+        """Replace an existing collection in in-memory storage.
+
+        Overwrites the collection stored under ``collection_id`` with the provided
+        :class:`app.models.Collection` instance. If no collection exists for the
+        given ID, no change is made and ``None`` is returned.
+
+        Args:
+            collection_id: The unique identifier of the collection to update.
+            collection: The new collection object to store for the given ID.
+
+        Returns:
+            The updated :class:`app.models.Collection` if ``collection_id`` exists
+            in storage; otherwise, ``None``.
+        """
+        if collection_id not in self._collections:
+            return None
+        self._collections[collection_id] = collection
+        return collection
+
     def delete_prompts_by_collection_id(self, collection_id: str) -> None:
         """Delete all prompts associated with a given collection ID.
 
@@ -402,10 +422,8 @@ class Storage:
         if not old_version:
             return None
 
-        # Create new version with incremented version number
-        new_version_num = self._prompt_meta[prompt_id].current_version + 1
-
         # Create new prompt from the old version, preserving original created_at
+        # Version number is incremented internally by create_prompt_version.
         original_prompt = self.get_prompt(prompt_id)
         new_prompt = Prompt(
             id=prompt_id,

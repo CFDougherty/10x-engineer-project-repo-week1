@@ -1,7 +1,9 @@
 """Utility functions for PromptLab."""
 
-from typing import List, Tuple, Optional
+import re
+from typing import List, Optional
 from app.models import Prompt
+from app.storage import storage
 from fuzzysearch import find_near_matches
 
 def sort_prompts_by_date(prompts: List[Prompt], descending: bool = True) -> List[Prompt]:
@@ -76,6 +78,10 @@ def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True, search
     else:  # 'all' or None - search all fields
         fields_to_search = ['title', 'content', 'description', 'tags', 'collection']
 
+    # Load collections once if needed — avoids a redundant storage call per prompt.
+    needs_collection_lookup = 'collection' in fields_to_search
+    all_collections = storage.get_all_collections() if needs_collection_lookup else []
+
     if not fuzzy:
         # Exact substring matching
         results = []
@@ -90,9 +96,6 @@ def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True, search
             if not match and 'tags' in fields_to_search and p.tags and any(query_lower in tag.lower() for tag in p.tags):
                 match = True
             if not match and 'collection' in fields_to_search and p.collection_id:
-                # Get all collections to check collection name
-                from app.storage import storage
-                all_collections = storage.get_all_collections()
                 if any(c.id == p.collection_id and query_lower in c.name.lower() for c in all_collections):
                     match = True
             if match:
@@ -115,9 +118,6 @@ def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True, search
         if 'tags' in fields_to_search and p.tags:
             fields_to_check.append(('tags', " ".join(p.tags).lower()))
         if 'collection' in fields_to_search and p.collection_id:
-            # Get all collections to check collection name
-            from app.storage import storage
-            all_collections = storage.get_all_collections()
             collection_names = [c.name.lower() for c in all_collections if c.id == p.collection_id]
             if collection_names:
                 fields_to_check.append(('collection', collection_names[0]))
@@ -149,8 +149,10 @@ def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True, search
 
                 if good_matches:
                     best_match = min(good_matches, key=lambda m: m.start)
-                    # Better scoring: prioritize earlier matches and shorter distance
-                    # Title matches get a bonus to appear first
+                    # Score formula: base 100 per field weight, penalised by match position
+                    # (start * 2) and edit distance (dist * 5).  Title matches get weight 2
+                    # so they rank above body/tag/collection matches at equal distance.
+                    # Matches scoring below 30 are considered too weak and are filtered out.
                     field_weight = 2.0 if field_name == 'title' else 1.0
                     score = 100 * field_weight - (best_match.start * 2) - (best_match.dist * 5)
                     # Ensure score doesn't go below 0
@@ -168,6 +170,11 @@ def validate_prompt_content(content: str) -> bool:
 
     The input is considered valid if, after stripping leading/trailing
     whitespace, it is not empty and contains at least 10 characters.
+
+    Note:
+        This function is a standalone utility and is not called by the API layer,
+        which relies solely on Pydantic model validation. It is available for
+        use in scripts or future middleware.
 
     Args:
         content: The raw prompt text to validate.
@@ -207,7 +214,6 @@ def extract_variables(content: str) -> List[str]:
         A list of variable names found in `content` (without ``{{`` and ``}}``).
         If no variables are found, returns an empty list.
     """
-    import re
     if content is None:
         return []
     pattern = r'\{\{(\w+)\}\}'
