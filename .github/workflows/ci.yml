@@ -3,10 +3,10 @@ name: CI
 on:
   push:
     branches:
-      - Week-4
+      - postgres-migration
   pull_request:
     branches:
-      - Week-4
+      - postgres-migration
 
 jobs:
   test:
@@ -16,6 +16,22 @@ jobs:
         python-version:
           - '3.10'
           - '3.11'
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: promptlab
+          POSTGRES_PASSWORD: promptlab
+          POSTGRES_DB: promptlab_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,6 +48,8 @@ jobs:
           python -m pip install -r backend/requirements.txt
 
       - name: Run tests
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://promptlab:promptlab@localhost:5432/promptlab_test
         run: |
           cd backend
           pytest -v
