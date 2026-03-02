@@ -1,6 +1,6 @@
-import { TextField, InputAdornment, Select, MenuItem, FormControl, CircularProgress } from '@mui/material';
+import { TextField, InputAdornment, Select, MenuItem, FormControl, CircularProgress, Tooltip, IconButton } from '@mui/material';
 import type { TextFieldProps } from '@mui/material';
-import { Search as SearchIcon } from '@mui/icons-material';
+import { Search as SearchIcon, Psychology as PsychologyIcon } from '@mui/icons-material';
 import { useRef, useEffect } from 'react';
 
 interface SearchBarProps extends Omit<TextFieldProps, 'onChange' | 'value'> {
@@ -12,6 +12,8 @@ interface SearchBarProps extends Omit<TextFieldProps, 'onChange' | 'value'> {
   onSearchFieldChange?: (field: string) => void;
   onSearch?: () => void;
   loading?: boolean;
+  semantic?: boolean;
+  onSemanticChange?: (semantic: boolean) => void;
 }
 
 export default function SearchBar({
@@ -23,6 +25,8 @@ export default function SearchBar({
   onSearchFieldChange,
   onSearch,
   loading = false,
+  semantic = false,
+  onSemanticChange,
 }: SearchBarProps) {
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     onChange(event.target.value);
@@ -58,7 +62,7 @@ export default function SearchBar({
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        placeholder={placeholder}
+        placeholder={semantic ? 'Semantic search (press Enter)...' : placeholder}
         inputRef={inputRef}
         InputProps={{
           startAdornment: (
@@ -70,9 +74,37 @@ export default function SearchBar({
         sx={{
           backgroundColor: 'background.paper',
           borderRadius: 1,
+          ...(semantic && {
+            '& .MuiOutlinedInput-root': {
+              '& fieldset': { borderColor: 'primary.main', borderWidth: 2 },
+            },
+          }),
         }}
       />
-      {onSearchFieldChange && (
+      {onSemanticChange && (
+        <Tooltip title={semantic ? 'Semantic search ON — click to switch to keyword search' : 'Enable semantic (AI) search'}>
+          <IconButton
+            size="small"
+            onClick={() => onSemanticChange(!semantic)}
+            sx={{
+              border: 1,
+              borderRadius: 1,
+              borderColor: semantic ? 'primary.main' : 'divider',
+              bgcolor: semantic ? 'primary.main' : 'background.paper',
+              color: semantic ? 'primary.contrastText' : 'text.secondary',
+              '&:hover': {
+                bgcolor: semantic ? 'primary.dark' : 'action.hover',
+              },
+              flexShrink: 0,
+              width: 40,
+              height: 40,
+            }}
+          >
+            <PsychologyIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
+      {onSearchFieldChange && !semantic && (
         <FormControl size="small" sx={{ minWidth: 120 }}>
           <Select
             value={searchField}

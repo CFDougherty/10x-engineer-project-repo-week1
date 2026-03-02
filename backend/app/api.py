@@ -151,6 +151,7 @@ async def list_prompts(
     search: Optional[str] = None,
     filter: Optional[str] = None,  # 'title', 'description', 'tags', 'collection', or 'all'
     fuzzy: bool = True,
+    semantic: bool = False,
     limit: Optional[int] = None,
     offset: Optional[int] = None
 ):
@@ -168,6 +169,8 @@ async def list_prompts(
         filter: Optional field to filter search by. One of: 'title', 'description',
             'tags', 'collection', or 'all'. Default: 'all' (search all fields).
         fuzzy: If True (default), uses fuzzy string matching for search. If False, uses exact substring matching.
+        semantic: If True, uses vector similarity search instead of lexical search.
+            Requires the embedding model to be loaded and prompts to have embeddings.
         limit: Optional maximum number of prompts to return.
         offset: Optional offset for pagination.
 
@@ -175,6 +178,25 @@ async def list_prompts(
         A `PromptList` containing the resulting list of prompts and the total
         number of prompts returned.
     """
+    # Semantic search path — bypasses lexical search when a query is provided
+    if semantic and search and search.strip():
+        try:
+            from app.embeddings import agenerate_query_embedding
+            query_embedding = await agenerate_query_embedding(search)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=f"Semantic search unavailable: {exc}")
+
+        _offset = offset or 0
+        _limit = limit or 20
+        results = await storage.semantic_search(
+            query_embedding=query_embedding,
+            limit=_limit,
+            offset=_offset,
+            collection_id=collection_id,
+        )
+        total = await storage.count_semantic_results(collection_id=collection_id)
+        return PromptList(prompts=results, total=total)
+
     all_prompts = await storage.get_all_prompts()
 
     # Filter by collection if specified
@@ -622,8 +644,21 @@ async def sse_endpoint(request: Request):
 
 # ============== Admin Endpoints ==============
 
+from pydantic import BaseModel as _BaseModel
+
+class PopulateTestDataRequest(_BaseModel):
+    num_prompts: int = 40
+    num_collections: int = 4
+    collection_chance: float = 0.6
+    tags_per_prompt: int = 3
+    random_seed: Optional[int] = None
+    tag_as_test_fill: bool = False
+    append_mode: bool = False
+
+_populate_progress: dict = {"current": 0, "total": 0, "active": False}
+
 @app.post("/admin/populate-test-data")
-async def populate_test_data():
+async def populate_test_data(request: PopulateTestDataRequest = PopulateTestDataRequest()):
     """Populate the database with realistic test data.
 
     This endpoint directly calls the data generation functions to create
@@ -636,9 +671,11 @@ async def populate_test_data():
             - prompts_created: Number of prompts created
             - collections_created: Number of collections created
     """
+    global _populate_progress
     try:
-        # Clear existing data first
-        await storage.clear()
+        # Optionally clear existing data first
+        if not request.append_mode:
+            await storage.clear()
 
         # Define prompt topics
         prompt_topics = [
@@ -686,11 +723,17 @@ async def populate_test_data():
             "Security and Compliance"
         ]
 
-        # Generate prompts
-        random.seed(42)  # For reproducible results
+        # Seed random for reproducibility
+        if request.random_seed is not None:
+            random.seed(request.random_seed)
+        else:
+            random.seed()
+
+        # Initialise progress tracker
+        _populate_progress = {"current": 0, "total": request.num_prompts, "active": True}
 
         created_prompts = []
-        for i in range(40):
+        for i in range(request.num_prompts):
             topic = random.choice(prompt_topics)
             modifiers = [
                 "Guide for", "Template for", "Best Practices for",
@@ -711,14 +754,14 @@ async def populate_test_data():
             )
 
             paragraphs.append("Key considerations:")
-            for j in range(3, 8):
+            for _ in range(3, 8):
                 paragraphs.append(
                     f"- {random.choice(['Consider', 'Evaluate', 'Analyze', 'Document', 'Test'])} the {random.choice(['impact', 'effectiveness', 'quality', 'performance'])} "
                     f"of {random.choice(['your', 'the', 'this'])} {title.lower()} implementation"
                 )
 
             paragraphs.append("\nBest practices:")
-            for j in range(3, 6):
+            for _ in range(3, 6):
                 paragraphs.append(
                     f"- Always {random.choice(['validate', 'test', 'document', 'review', 'optimize'])} your {title.lower()} "
                     f"before {random.choice(['deployment', 'release', 'sharing', 'presentation'])}"
@@ -748,15 +791,18 @@ async def populate_test_data():
                 relevant_categories = random.sample(tag_categories, min(3, len(tag_categories)))
 
             tags = []
-            for category in relevant_categories[:3]:
+            for category in relevant_categories[:request.tags_per_prompt]:
                 if category:
                     tags.append(random.choice(category))
 
-            while len(tags) < 3:
+            while len(tags) < request.tags_per_prompt:
                 generic_tags = ["AI", "Template", "Best Practices", "Guide", "Framework"]
                 new_tag = random.choice(generic_tags)
                 if new_tag not in tags:
                     tags.append(new_tag)
+
+            if request.tag_as_test_fill:
+                tags.append("test fill")
 
             # Create prompt
             prompt_obj = Prompt(
@@ -764,15 +810,17 @@ async def populate_test_data():
                 title=title,
                 content=content,
                 description=description,
-                tags=list(set(tags))  # Remove duplicates
+                tags=list(set(tags))
             )
             await storage.create_prompt(prompt_obj)
             await storage.create_prompt_version(prompt_obj.id, prompt_obj)
             created_prompts.append(prompt_obj)
 
+            _populate_progress["current"] = i + 1
+
         # Generate collections
         created_collections = []
-        for i in range(4):
+        for _ in range(request.num_collections):
             name = random.choice(collection_themes)
             description = (
                 f"A curated collection of prompts focused on {name.lower()}. "
@@ -789,10 +837,12 @@ async def populate_test_data():
 
         # Randomly assign prompts to collections
         for prompt in created_prompts:
-            if random.random() < 0.6 and created_collections:  # 60% chance
+            if random.random() < request.collection_chance and created_collections:
                 collection = random.choice(created_collections)
                 prompt.collection_id = collection.id
                 await storage.update_prompt(prompt.id, prompt)
+
+        _populate_progress["active"] = False
 
         # Notify clients about data change
         await notify_sse_clients('{"event": "data_changed", "message": "Test data populated", "action": "populate"}')
@@ -805,6 +855,7 @@ async def populate_test_data():
         }
 
     except Exception as e:
+        _populate_progress["active"] = False
         raise HTTPException(
             status_code=500,
             detail=f"Failed to populate test data: {str(e)}"
@@ -847,6 +898,86 @@ async def clear_all_data():
             status_code=500,
             detail=f"Failed to clear data: {str(e)}"
         )
+
+@app.get("/admin/populate-status")
+async def get_populate_status():
+    """Return the current progress of an in-flight populate-test-data operation."""
+    return _populate_progress
+
+
+@app.delete("/admin/clear-test-data")
+async def clear_test_data():
+    """Delete only prompts tagged with 'test fill'.
+
+    Returns:
+        A response object containing:
+            - status: Operation status
+            - prompts_removed: Number of prompts deleted
+    """
+    try:
+        all_prompts = await storage.get_all_prompts()
+        test_prompts = [p for p in all_prompts if p.tags and "test fill" in p.tags]
+        for p in test_prompts:
+            await storage.delete_prompt(p.id)
+
+        await notify_sse_clients('{"event": "data_changed", "message": "Test data cleared", "action": "clear_test"}')
+
+        return {
+            "status": "success",
+            "message": f"Removed {len(test_prompts)} prompt(s) tagged 'test fill'",
+            "prompts_removed": len(test_prompts)
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to clear test data: {str(e)}"
+        )
+
+
+@app.get("/admin/embedding-status")
+async def embedding_status():
+    """Return the number of prompts with and without embeddings.
+
+    Used by the frontend to display an embedding progress indicator.
+
+    Returns:
+        A response object containing:
+            - total: Total number of prompts
+            - embedded: Number of prompts that have an embedding
+            - complete: True when all prompts have embeddings (or total is 0)
+    """
+    all_prompts = await storage.get_all_prompts()
+    total = len(all_prompts)
+    embedded = await storage.count_semantic_results()
+    return {"total": total, "embedded": embedded, "complete": total == 0 or embedded == total}
+
+
+@app.post("/admin/backfill-embeddings")
+async def backfill_embeddings():
+    """Generate embeddings for all prompts that do not have one.
+
+    Loads the sentence-transformers model on first call (may take a few seconds).
+    Re-running this endpoint is safe — it skips prompts that already have embeddings.
+
+    Returns:
+        A response object containing:
+            - status: Operation status ("success")
+            - updated: Number of prompts that received embeddings
+            - message: Human-readable summary
+    """
+    try:
+        from app.embeddings import generate_embedding
+        updated = await storage.backfill_embeddings(generate_fn=generate_embedding)
+        return {
+            "status": "success",
+            "updated": updated,
+            "message": f"Embeddings generated for {updated} prompt(s).",
+        }
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=f"Model unavailable: {exc}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 # ============== Versioning Endpoints ==============
 

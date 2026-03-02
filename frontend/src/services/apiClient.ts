@@ -17,6 +17,7 @@ export const getPrompts = (params?: {
   search?: string;
   filter?: string;  // 'title' | 'description' | 'tags' | 'collection' | 'all'
   sort?: string;
+  semantic?: boolean;
 }) => apiClient.get('/prompts', { params });
 
 export const getPromptById = (id: string) => apiClient.get(`/prompts/${id}`);
@@ -63,6 +64,33 @@ export const removePromptFromCollection = (collectionId: string, promptId: strin
   apiClient.delete(`/collections/${collectionId}/prompts/${promptId}`);
 
 // Admin API endpoints
-export const populateTestData = () => apiClient.post('/admin/populate-test-data');
+export interface PopulateConfig {
+  num_prompts: number;
+  num_collections: number;
+  collection_chance: number;
+  tags_per_prompt: number;
+  random_seed?: number | null;
+  tag_as_test_fill: boolean;
+  append_mode: boolean;
+}
+
+export interface PopulateProgress {
+  current: number;
+  total: number;
+  active: boolean;
+}
+
+export const populateTestData = (config: PopulateConfig) =>
+  apiClient.post('/admin/populate-test-data', config);
+
+export const getPopulateStatus = () =>
+  apiClient.get<PopulateProgress>('/admin/populate-status');
+
+export const clearTestData = () => apiClient.delete('/admin/clear-test-data');
 
 export const clearAllData = () => apiClient.delete('/admin/clear-all-data');
+
+export const getEmbeddingStatus = () =>
+  apiClient.get<{ total: number; embedded: number; complete: boolean }>('/admin/embedding-status');
+
+export const backfillEmbeddings = () => apiClient.post('/admin/backfill-embeddings');

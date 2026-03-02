@@ -9,7 +9,7 @@ WORKDIR /app
 COPY backend/requirements.txt ./requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --upgrade pip setuptools wheel && \
-    python -m pip install --prefix=/install -r requirements.txt
+    python -m pip install --ignore-installed --prefix=/install -r requirements.txt
 
 FROM ${PYTHON_IMAGE}
 
@@ -20,7 +20,8 @@ LABEL org.opencontainers.image.title="PromptLab API backend" \
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=${APP_PORT}
+    PORT=${APP_PORT} \
+    HF_HOME=/app/.cache/huggingface
 
 WORKDIR /app
 
@@ -33,6 +34,11 @@ RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
 
 COPY --chown=appuser:appuser backend/app ./app
 COPY --chown=appuser:appuser backend/main.py ./
+COPY --chown=appuser:appuser backend/alembic ./alembic
+COPY --chown=appuser:appuser backend/alembic.ini ./
+
+RUN mkdir -p /app/.cache/huggingface/hub \
+    && chown -R appuser:appuser /app/.cache
 
 USER appuser
 

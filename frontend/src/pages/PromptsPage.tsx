@@ -19,6 +19,7 @@ import SearchBar from '../components/SearchBar';
 import Button from '../components/Button';
 import PromptCard from '../components/PromptCard';
 import VersionHistoryDialog from '../components/VersionHistoryDialog';
+import { getPrompts } from '../services/apiClient';
 
 export default function PromptsPage() {
   const { prompts, loading, error, create, update, remove, refetch } = usePrompts();
@@ -30,6 +31,8 @@ export default function PromptsPage() {
   const [selectedCollection, setSelectedCollection] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [historyPromptId, setHistoryPromptId] = useState<string | null>(null);
+  const [semantic, setSemantic] = useState(false);
+  const [semanticResults, setSemanticResults] = useState<Prompt[] | null>(null);
   const { collections } = useCollections();
 
   const filteredPrompts = useMemo(() => {
@@ -56,13 +59,31 @@ export default function PromptsPage() {
     return result;
   }, [prompts, searchQuery, filter, selectedCollection, collections]);
 
+  // What to display: semantic results when active, otherwise client-side filtered list
+  const displayedPrompts = semantic && semanticResults !== null ? semanticResults : filteredPrompts;
+
   const handleSearch = async () => {
     setSearchLoading(true);
     try {
-      await refetch();
+      if (semantic && searchQuery.trim()) {
+        const res = await getPrompts({
+          search: searchQuery,
+          semantic: true,
+          ...(selectedCollection && selectedCollection !== '__none__' ? { collectionId: selectedCollection } : {}),
+        });
+        setSemanticResults(res.data.prompts);
+      } else {
+        setSemanticResults(null);
+        await refetch();
+      }
     } finally {
       setSearchLoading(false);
     }
+  };
+
+  const handleSemanticToggle = (next: boolean) => {
+    setSemantic(next);
+    setSemanticResults(null); // clear stale results when toggling
   };
 
   const handleOpen = () => {
@@ -134,6 +155,8 @@ export default function PromptsPage() {
               onSearchFieldChange={setFilter}
               placeholder="Search prompts..."
               loading={searchLoading}
+              semantic={semantic}
+              onSemanticChange={handleSemanticToggle}
               sx={{ flexGrow: 1 }}
             />
             <FormControl sx={{ minWidth: { xs: '100%', sm: 200 } }}>
@@ -172,6 +195,11 @@ export default function PromptsPage() {
               </Select>
             </FormControl>
           </Box>
+          {semantic && (
+            <Typography variant="caption" color="text.secondary">
+              Semantic mode — press Enter or click search to query by meaning
+            </Typography>
+          )}
         </Box>
         <Button
           variant="contained"
@@ -211,11 +239,15 @@ export default function PromptsPage() {
         onRestored={refetch}
       />
 
-      {filteredPrompts.length === 0 ? (
-        <Alert severity="info">No prompts found. Create your first prompt!</Alert>
+      {displayedPrompts.length === 0 ? (
+        <Alert severity="info">
+          {semantic && searchQuery.trim()
+            ? 'No semantically similar prompts found. Try a different query or run backfill if embeddings are not yet generated.'
+            : 'No prompts found. Create your first prompt!'}
+        </Alert>
       ) : (
         <Grid container spacing={3}>
-          {filteredPrompts.map((prompt) => (
+          {displayedPrompts.map((prompt) => (
             // @ts-expect-error - prompt type has missing properties
             <Grid item xs={12} sm={6} md={4} key={prompt.id} sx={{ display: 'flex' }}>
               <PromptCard

@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import AdminToolsDialog from '../components/AdminToolsDialog';
+import EmbeddingStatusBar from '../components/EmbeddingStatusBar';
 import { connectSSE, disconnectSSE } from '../services/sseClient';
 import { usePrompts } from '../contexts/PromptsContext';
 import { useCollections } from '../contexts/CollectionsContext';
@@ -46,6 +47,7 @@ export default function Layout() {
         isMobile={isMobile}
         onAdminClick={handleAdminClick}
       />
+      <EmbeddingStatusBar />
       <Box component="main" sx={{ px: { xs: 2, md: 3 }, pt: 4, flexGrow: 1, maxWidth: { xs: '100%', md: '67%' }, mx: 'auto', width: '100%', boxSizing: 'border-box' }}>
         <Outlet />
       </Box>

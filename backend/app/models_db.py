@@ -43,7 +43,7 @@ class PromptDB(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
     version: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # pgvector: nullable groundwork — no embedding generation yet
-    embedding: Mapped[Optional[List[float]]] = mapped_column(Vector(1536), nullable=True)
+    embedding: Mapped[Optional[List[float]]] = mapped_column(Vector(384), nullable=True)
 
     collection: Mapped[Optional["CollectionDB"]] = relationship(
         "CollectionDB", back_populates="prompts"

@@ -5,10 +5,12 @@ replaced with proper connection pooling (e.g. PgBouncer). For single-instance
 use the built-in SQLAlchemy pool is sufficient.
 """
 
+import asyncio
+import logging
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Callable, List, Optional
 
-from sqlalchemy import select, delete
+from sqlalchemy import func as sa_func, select, delete
 
 from app.database import AsyncSessionLocal
 from app.models import Prompt, Collection, PromptVersion
@@ -87,6 +89,11 @@ class Storage:
                 updated_at=prompt.updated_at,
                 version=prompt.version,
             )
+            try:
+                from app.embeddings import agenerate_embedding
+                row.embedding = await agenerate_embedding(prompt.title, prompt.content, prompt.description)
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Embedding failed for prompt %s: %s", prompt.id, exc)
             session.add(row)
             await session.commit()
             await session.refresh(row)
@@ -121,6 +128,11 @@ class Storage:
             row.tags = prompt.tags
             row.updated_at = prompt.updated_at
             row.version = prompt.version
+            try:
+                from app.embeddings import agenerate_embedding
+                row.embedding = await agenerate_embedding(prompt.title, prompt.content, prompt.description)
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Embedding failed for prompt %s: %s", prompt_id, exc)
             await session.commit()
             await session.refresh(row)
             return _to_prompt(row)
@@ -301,6 +313,73 @@ class Storage:
         await self.update_prompt(prompt_id, new_prompt)
         await self.create_prompt_version(prompt_id, new_prompt)
         return await self.get_prompt(prompt_id)
+
+    # ============== Semantic Search ==============
+
+    async def semantic_search(
+        self,
+        query_embedding: List[float],
+        limit: int = 20,
+        offset: int = 0,
+        collection_id: Optional[str] = None,
+    ) -> List[Prompt]:
+        """Return prompts ordered by cosine similarity to query_embedding.
+
+        Only prompts with a non-NULL embedding are considered.
+        The <=> operator is pgvector cosine distance; ascending = most similar first.
+        """
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(PromptDB)
+                .where(PromptDB.embedding.isnot(None))
+                .order_by(PromptDB.embedding.op("<=>")(query_embedding))
+            )
+            if collection_id:
+                stmt = stmt.where(PromptDB.collection_id == collection_id)
+            stmt = stmt.offset(offset).limit(limit)
+            result = await session.execute(stmt)
+            return [_to_prompt(r) for r in result.scalars().all()]
+
+    async def count_semantic_results(
+        self,
+        collection_id: Optional[str] = None,
+    ) -> int:
+        """Count prompts that have an embedding (optionally filtered by collection)."""
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(sa_func.count())
+                .select_from(PromptDB)
+                .where(PromptDB.embedding.isnot(None))
+            )
+            if collection_id:
+                stmt = stmt.where(PromptDB.collection_id == collection_id)
+            result = await session.execute(stmt)
+            return result.scalar_one()
+
+    async def backfill_embeddings(self, generate_fn: Callable) -> int:
+        """Generate embeddings for all prompts where embedding IS NULL.
+
+        generate_fn: sync callable (title, content, description) -> List[float].
+        Returns count of prompts updated. Idempotent — skips already-embedded prompts.
+        """
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(PromptDB).where(PromptDB.embedding.is_(None))
+            )
+            rows = result.scalars().all()
+            updated = 0
+            for row in rows:
+                try:
+                    row.embedding = await asyncio.get_event_loop().run_in_executor(
+                        None, generate_fn, row.title, row.content, row.description
+                    )
+                    updated += 1
+                except Exception as exc:
+                    logging.getLogger(__name__).warning(
+                        "Backfill failed for prompt %s: %s", row.id, exc
+                    )
+            await session.commit()
+            return updated
 
     # ============== Utility ==============
 

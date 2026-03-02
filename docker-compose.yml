@@ -31,6 +31,7 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/main.py:/app/main.py
+      - huggingface_cache:/app/.cache/huggingface
     depends_on:
       db:
         condition: service_healthy
@@ -55,3 +56,4 @@ services:
 
 volumes:
   postgres_data:
+  huggingface_cache:
