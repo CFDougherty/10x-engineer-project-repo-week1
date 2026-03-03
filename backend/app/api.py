@@ -25,7 +25,7 @@ import uuid
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Body, Request, status
+from fastapi import FastAPI, HTTPException, Body, Request, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
@@ -655,86 +655,61 @@ class PopulateTestDataRequest(_BaseModel):
     tag_as_test_fill: bool = False
     append_mode: bool = False
 
-_populate_progress: dict = {"current": 0, "total": 0, "active": False}
+_populate_progress: dict = {"current": 0, "total": 0, "active": False, "error": None}
 
-@app.post("/admin/populate-test-data")
-async def populate_test_data(request: PopulateTestDataRequest = PopulateTestDataRequest()):
-    """Populate the database with realistic test data.
+_PROMPT_TOPICS = [
+    "Chatbot Personality", "Data Analysis", "Creative Writing",
+    "Technical Documentation", "Customer Support", "Content Generation",
+    "Code Review", "API Design", "Database Optimization",
+    "Security Audit", "Performance Testing", "UX Research",
+    "Product Management", "Marketing Strategy", "Sales Script",
+    "Email Campaign", "Social Media Post", "Blog Article",
+    "Technical Interview", "System Design", "Algorithm Explanation",
+    "Debugging Guide", "CI/CD Pipeline", "DevOps Best Practices",
+    "Cloud Architecture", "Microservices", "Monolith Conversion",
+    "API Gateway", "Service Mesh", "Containerization",
+    "Orchestration", "Infrastructure as Code", "Observability",
+    "Monitoring", "Logging", "Tracing", "Incident Response",
+    "Disaster Recovery", "Backup Strategy", "Compliance Check",
+    "Risk Assessment", "Threat Modeling", "Penetration Testing"
+]
 
-    This endpoint directly calls the data generation functions to create
-    sample prompts and collections for testing purposes.
+_TAG_CATEGORIES = [
+    ["AI", "Machine Learning", "Deep Learning", "NLP", "Computer Vision"],
+    ["Chatbot", "Virtual Assistant", "Conversational AI", "Dialogue Systems"],
+    ["Data Analysis", "Data Science", "Statistics", "Visualization", "ETL"],
+    ["Creative Writing", "Storytelling", "Content Creation", "Copywriting"],
+    ["Technical", "Documentation", "API", "SDK", "Library"],
+    ["Testing", "QA", "Automation", "Unit Test", "Integration Test"],
+    ["Security", "Compliance", "Audit", "Risk", "Threat"],
+    ["DevOps", "CI/CD", "Infrastructure", "Cloud", "Container"],
+    ["Product", "Management", "Strategy", "Roadmap", "Prioritization"],
+    ["Marketing", "Sales", "Customer", "Support", "Engagement"]
+]
 
-    Returns:
-        A response object containing:
-            - status: Operation status
-            - message: Success message
-            - prompts_created: Number of prompts created
-            - collections_created: Number of collections created
-    """
-    global _populate_progress
+_COLLECTION_THEMES = [
+    "AI Assistants",
+    "Creative Writing Prompts",
+    "Data Analysis Templates",
+    "Technical Documentation",
+    "Customer Support Scripts",
+    "Content Generation",
+    "Code Review Guidelines",
+    "API Design Patterns",
+    "DevOps Best Practices",
+    "Security and Compliance"
+]
+
+async def _do_populate(request: PopulateTestDataRequest) -> None:
+    """Background worker: generates test data and updates _populate_progress."""
     try:
         # Optionally clear existing data first
         if not request.append_mode:
             await storage.clear()
 
-        # Define prompt topics
-        prompt_topics = [
-            "Chatbot Personality", "Data Analysis", "Creative Writing",
-            "Technical Documentation", "Customer Support", "Content Generation",
-            "Code Review", "API Design", "Database Optimization",
-            "Security Audit", "Performance Testing", "UX Research",
-            "Product Management", "Marketing Strategy", "Sales Script",
-            "Email Campaign", "Social Media Post", "Blog Article",
-            "Technical Interview", "System Design", "Algorithm Explanation",
-            "Debugging Guide", "CI/CD Pipeline", "DevOps Best Practices",
-            "Cloud Architecture", "Microservices", "Monolith Conversion",
-            "API Gateway", "Service Mesh", "Containerization",
-            "Orchestration", "Infrastructure as Code", "Observability",
-            "Monitoring", "Logging", "Tracing", "Incident Response",
-            "Disaster Recovery", "Backup Strategy", "Compliance Check",
-            "Risk Assessment", "Threat Modeling", "Penetration Testing"
-        ]
-
-        # Define tag categories
-        tag_categories = [
-            ["AI", "Machine Learning", "Deep Learning", "NLP", "Computer Vision"],
-            ["Chatbot", "Virtual Assistant", "Conversational AI", "Dialogue Systems"],
-            ["Data Analysis", "Data Science", "Statistics", "Visualization", "ETL"],
-            ["Creative Writing", "Storytelling", "Content Creation", "Copywriting"],
-            ["Technical", "Documentation", "API", "SDK", "Library"],
-            ["Testing", "QA", "Automation", "Unit Test", "Integration Test"],
-            ["Security", "Compliance", "Audit", "Risk", "Threat"],
-            ["DevOps", "CI/CD", "Infrastructure", "Cloud", "Container"],
-            ["Product", "Management", "Strategy", "Roadmap", "Prioritization"],
-            ["Marketing", "Sales", "Customer", "Support", "Engagement"]
-        ]
-
-        # Define collection themes
-        collection_themes = [
-            "AI Assistants",
-            "Creative Writing Prompts",
-            "Data Analysis Templates",
-            "Technical Documentation",
-            "Customer Support Scripts",
-            "Content Generation",
-            "Code Review Guidelines",
-            "API Design Patterns",
-            "DevOps Best Practices",
-            "Security and Compliance"
-        ]
-
-        # Seed random for reproducibility
-        if request.random_seed is not None:
-            random.seed(request.random_seed)
-        else:
-            random.seed()
-
-        # Initialise progress tracker
-        _populate_progress = {"current": 0, "total": request.num_prompts, "active": True}
-
         created_prompts = []
         for i in range(request.num_prompts):
-            topic = random.choice(prompt_topics)
+            topic = random.choice(_PROMPT_TOPICS)
             modifiers = [
                 "Guide for", "Template for", "Best Practices for",
                 "Checklist for", "Framework for", "Strategy for",
@@ -781,14 +756,14 @@ async def populate_test_data(request: PopulateTestDataRequest = PopulateTestData
             # Generate tags
             relevant_categories = []
             title_lower = title.lower()
-            for category in tag_categories:
+            for category in _TAG_CATEGORIES:
                 for tag in category:
                     if any(word in title_lower for word in tag.lower().split()):
                         relevant_categories.append(category)
                         break
 
             if not relevant_categories:
-                relevant_categories = random.sample(tag_categories, min(3, len(tag_categories)))
+                relevant_categories = random.sample(_TAG_CATEGORIES, min(3, len(_TAG_CATEGORIES)))
 
             tags = []
             for category in relevant_categories[:request.tags_per_prompt]:
@@ -821,7 +796,7 @@ async def populate_test_data(request: PopulateTestDataRequest = PopulateTestData
         # Generate collections
         created_collections = []
         for _ in range(request.num_collections):
-            name = random.choice(collection_themes)
+            name = random.choice(_COLLECTION_THEMES)
             description = (
                 f"A curated collection of prompts focused on {name.lower()}. "
                 f"These templates help standardize and improve your work in this area."
@@ -842,24 +817,52 @@ async def populate_test_data(request: PopulateTestDataRequest = PopulateTestData
                 prompt.collection_id = collection.id
                 await storage.update_prompt(prompt.id, prompt)
 
+        _populate_progress["prompts_created"] = len(created_prompts)
+        _populate_progress["collections_created"] = len(created_collections)
         _populate_progress["active"] = False
 
         # Notify clients about data change
         await notify_sse_clients('{"event": "data_changed", "message": "Test data populated", "action": "populate"}')
 
-        return {
-            "status": "success",
-            "message": "Test data populated successfully",
-            "prompts_created": len(created_prompts),
-            "collections_created": len(created_collections)
-        }
+        # Kick off embedding generation server-side (client is already gone)
+        try:
+            from app.embeddings import generate_embedding
+            await storage.backfill_embeddings(generate_fn=generate_embedding)
+        except Exception:
+            pass  # Model may not be available; EmbeddingStatusBar handles retries
 
     except Exception as e:
         _populate_progress["active"] = False
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to populate test data: {str(e)}"
-        )
+        _populate_progress["error"] = str(e)
+        print(f"[populate background task] Error: {e}")
+
+
+@app.post("/admin/populate-test-data", status_code=202)
+async def populate_test_data(
+    background_tasks: BackgroundTasks,
+    request: PopulateTestDataRequest = PopulateTestDataRequest(),
+):
+    """Start test-data generation in the background and return immediately.
+
+    Returns 202 Accepted. Clients poll /admin/populate-status for progress.
+    Returns 409 Conflict if a generation is already running.
+    """
+    global _populate_progress
+
+    if _populate_progress.get("active"):
+        raise HTTPException(status_code=409, detail="A populate operation is already in progress.")
+
+    # Seed in-request so determinism is preserved even in background context
+    if request.random_seed is not None:
+        random.seed(request.random_seed)
+    else:
+        random.seed()
+
+    _populate_progress = {"current": 0, "total": request.num_prompts, "active": True, "error": None}
+
+    background_tasks.add_task(_do_populate, request)
+
+    return {"status": "started", "total": request.num_prompts}
 
 @app.delete("/admin/clear-all-data")
 async def clear_all_data():

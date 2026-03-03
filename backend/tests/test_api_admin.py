@@ -23,18 +23,21 @@ async def test_populate_test_data():
 
     response = client.post("/admin/populate-test-data")
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     data = response.json()
-    assert data["status"] == "success"
-    assert "prompts_created" in data
-    assert "collections_created" in data
-    assert data["prompts_created"] > 0
-    assert data["collections_created"] > 0
+    assert data["status"] == "started"
+    assert data["total"] > 0
+
+    # BackgroundTasks run synchronously in TestClient, so data is present now.
+    # Poll /admin/populate-status for creation counts (not the 202 response).
+    status_response = client.get("/admin/populate-status")
+    assert status_response.status_code == 200
+    status = status_response.json()
 
     prompts = await storage.get_all_prompts()
     collections = await storage.get_all_collections()
-    assert len(prompts) == data["prompts_created"]
-    assert len(collections) == data["collections_created"]
+    assert len(prompts) == status["prompts_created"]
+    assert len(collections) == status["collections_created"]
     assert len(prompts) > 0
     assert len(collections) > 0
 
@@ -118,8 +121,9 @@ async def test_populate_test_data_all_prompts_have_versions():
     await storage.clear()
 
     response = client.post("/admin/populate-test-data")
-    assert response.status_code == 200
+    assert response.status_code == 202
 
+    # BackgroundTasks run synchronously in TestClient, so data is present now
     prompts = await storage.get_all_prompts()
     assert len(prompts) > 0, "populate-test-data created no prompts"
 
@@ -131,15 +135,43 @@ async def test_populate_test_data_all_prompts_have_versions():
         )
 
 
-def test_populate_test_data_storage_exception_returns_500():
-    """populate-test-data must return 500 when storage raises an unexpected exception.
+def test_populate_test_data_storage_exception_records_error():
+    """populate-test-data must record errors in populate-status when the background task fails.
 
-    Uses mock to force storage.create_collection to raise, triggering the except block.
+    Since the endpoint returns 202 immediately (fire-and-forget), exceptions cannot
+    surface as HTTP status codes. Instead they must be written to _populate_progress["error"]
+    so that polling clients (e.g. PopulateStatusBar) can surface the failure.
+    TestClient executes BackgroundTasks synchronously, so the error is present
+    by the time we poll /admin/populate-status after the POST.
     """
-    with patch.object(storage, "create_collection", side_effect=RuntimeError("boom")):
+    import app.api as api_module
+    api_module._populate_progress.update({"current": 0, "total": 0, "active": False, "error": None})
+
+    with patch.object(storage, "create_prompt", side_effect=RuntimeError("boom")):
         response = client.post("/admin/populate-test-data")
-    assert response.status_code == 500
-    assert "Failed to populate test data" in response.json()["detail"]
+
+    assert response.status_code == 202
+
+    status = client.get("/admin/populate-status")
+    assert status.status_code == 200
+    data = status.json()
+    assert data["active"] is False
+    assert data["error"] is not None
+    assert "boom" in data["error"]
+
+
+def test_populate_test_data_returns_409_when_already_running():
+    """populate-test-data must return 409 Conflict if a populate is already in progress."""
+    import app.api as api_module
+    original = api_module._populate_progress.copy()
+    api_module._populate_progress["active"] = True
+    try:
+        response = client.post("/admin/populate-test-data")
+        assert response.status_code == 409
+        assert "already in progress" in response.json()["detail"]
+    finally:
+        api_module._populate_progress.update(original)
+        api_module._populate_progress["active"] = False
 
 
 def test_clear_all_data_storage_exception_returns_500():

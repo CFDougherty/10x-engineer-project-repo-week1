@@ -78,6 +78,7 @@ export interface PopulateProgress {
   current: number;
   total: number;
   active: boolean;
+  error: string | null;
 }
 
 export const populateTestData = (config: PopulateConfig) =>

@@ -1,11 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Button, Typography, Box, TextField, Switch,
-  FormControlLabel, Slider, LinearProgress, Divider,
+  FormControlLabel, Slider, Divider,
 } from '@mui/material';
 import {
-  populateTestData, clearAllData, clearTestData, getPopulateStatus, backfillEmbeddings,
+  populateTestData, clearAllData, clearTestData,
 } from '../services/apiClient';
 import type { PopulateConfig } from '../services/apiClient';
 import ConfirmationDialog from './ConfirmationDialog';
@@ -22,7 +22,6 @@ const AdminToolsDialog: React.FC<AdminToolsDialogProps> = ({ open, onClose }) =>
   const [actionType, setActionType] = useState<'populate' | 'clear' | 'clearTest' | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
 
   // Generation config
   const [numPrompts, setNumPrompts] = useState(40);
@@ -33,29 +32,8 @@ const AdminToolsDialog: React.FC<AdminToolsDialogProps> = ({ open, onClose }) =>
   const [tagAsTestFill, setTagAsTestFill] = useState(false);
   const [appendMode, setAppendMode] = useState(false);
 
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   const { refetch: refetchPrompts } = usePrompts();
   const { refetch: refetchCollections } = useCollections();
-
-  const stopPolling = () => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  };
-
-  const startPolling = () => {
-    pollRef.current = setInterval(async () => {
-      try {
-        const { data } = await getPopulateStatus();
-        setProgress({ current: data.current, total: data.total });
-        if (!data.active) stopPolling();
-      } catch {
-        stopPolling();
-      }
-    }, 300);
-  };
 
   const handlePopulateTestData = () => {
     setActionType('populate');
@@ -75,7 +53,6 @@ const AdminToolsDialog: React.FC<AdminToolsDialogProps> = ({ open, onClose }) =>
   const executeAction = async () => {
     setIsLoading(true);
     setError(null);
-    setProgress(null);
 
     try {
       if (actionType === 'populate') {
@@ -88,27 +65,20 @@ const AdminToolsDialog: React.FC<AdminToolsDialogProps> = ({ open, onClose }) =>
           tag_as_test_fill: tagAsTestFill,
           append_mode: appendMode,
         };
-        startPolling();
-        await populateTestData(config);
-        stopPolling();
-        setProgress(null);
-        await refetchPrompts();
-        await refetchCollections();
-        // Kick off embedding generation in the background; EmbeddingStatusBar will track progress
-        backfillEmbeddings().catch(() => {/* ignore — model may not be available */});
+        await populateTestData(config); // returns immediately (202); PopulateStatusBar tracks progress
+        onClose();
       } else if (actionType === 'clearTest') {
         await clearTestData();
         await refetchPrompts();
         await refetchCollections();
+        onClose();
       } else if (actionType === 'clear') {
         await clearAllData();
         await refetchPrompts();
         await refetchCollections();
+        onClose();
       }
-      onClose();
     } catch (err) {
-      stopPolling();
-      setProgress(null);
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setIsLoading(false);
@@ -130,10 +100,6 @@ const AdminToolsDialog: React.FC<AdminToolsDialogProps> = ({ open, onClose }) =>
     if (actionType === 'clearTest') return "Delete all prompts tagged 'test fill'?";
     return 'Delete all data? This action cannot be undone.';
   };
-
-  const progressPct = progress && progress.total > 0
-    ? Math.round((progress.current / progress.total) * 100)
-    : 0;
 
   return (
     <>
@@ -230,21 +196,6 @@ const AdminToolsDialog: React.FC<AdminToolsDialogProps> = ({ open, onClose }) =>
             >
               Populate Test Data
             </Button>
-
-            {/* Progress indicator */}
-            {isLoading && actionType === 'populate' && (
-              <Box>
-                <LinearProgress
-                  variant={progress ? 'determinate' : 'indeterminate'}
-                  value={progressPct}
-                />
-                {progress && (
-                  <Typography variant="caption" color="text.secondary">
-                    Generating... {progress.current.toLocaleString()} / {progress.total.toLocaleString()}
-                  </Typography>
-                )}
-              </Box>
-            )}
 
             <Divider />
 
