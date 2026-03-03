@@ -196,7 +196,7 @@ export default function PromptsPage() {
             </FormControl>
           </Box>
           {semantic && (
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color="white">
               Semantic mode — press Enter or click search to query by meaning
             </Typography>
           )}
