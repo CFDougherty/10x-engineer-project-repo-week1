@@ -17,6 +17,7 @@ import CollectionCard from '../components/CollectionCard';
 import CollectionCreationDialog from '../components/CollectionCreationDialog';
 import CollectionPromptsDialog from '../components/CollectionPromptsDialog';
 import type { Collection } from '../types/collection';
+import type { Prompt } from '../types/prompt';
 
 export default function CollectionsPage() {
   const navigate = useNavigate();
@@ -126,7 +127,7 @@ export default function CollectionsPage() {
             <Grid key={collection.id} item xs={12} sm={6} md={4} sx={{ display: 'flex' }}>
               <CollectionCard
                 collection={collection}
-                promptCount={allPrompts.filter(p => p.collection_id === collection.id).length}
+                promptCount={allPrompts.filter((p: Prompt) => p.collection_id === collection.id).length}
                 onEdit={handleCollectionEdit}
                 onDelete={handleCollectionDeleteRequest}
                 onViewPrompts={handleViewPrompts}

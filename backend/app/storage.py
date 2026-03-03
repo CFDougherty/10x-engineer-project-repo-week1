@@ -6,15 +6,97 @@ use the built-in SQLAlchemy pool is sufficient.
 """
 
 import asyncio
+import base64
+import json
 import logging
+import os
 from datetime import datetime, timezone
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Tuple
 
-from sqlalchemy import func as sa_func, select, delete
+from sqlalchemy import func as sa_func, select, delete, update, or_, and_, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.database import AsyncSessionLocal
 from app.models import Prompt, Collection, PromptVersion
 from app.models_db import PromptDB, CollectionDB, PromptVersionDB, PromptMetaDB
+
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+CONTENT_PREVIEW_LEN = 300
+
+
+# ---------------------------------------------------------------------------
+# Cursor helpers (keyset pagination)
+# ---------------------------------------------------------------------------
+
+def _encode_cursor(created_at: datetime, prompt_id: str) -> str:
+    """Encode a (created_at, id) pair into a URL-safe base64 cursor string."""
+    payload = {"t": created_at.isoformat(), "id": prompt_id}
+    return base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
+
+
+def _decode_cursor(cursor: str) -> Tuple[datetime, str]:
+    """Decode a cursor string back to (created_at, id).
+
+    Raises ValueError on malformed input so callers can return HTTP 400.
+    """
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(cursor.encode()))
+        return datetime.fromisoformat(payload["t"]), payload["id"]
+    except Exception as exc:
+        raise ValueError(f"Invalid pagination cursor: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# Search condition builder
+# ---------------------------------------------------------------------------
+
+def _build_search_conditions(query: str, search_field: str, fuzzy: bool):
+    """Return a SQLAlchemy WHERE expression for text search using pg_trgm.
+
+    For fuzzy=True the condition combines an ILIKE substring match with a
+    pg_trgm similarity threshold so that near-matches are also caught.
+    For fuzzy=False only the ILIKE match is used.
+
+    The ``collection`` field is intentionally not handled here — callers that
+    need collection-name search must add a JOIN and filter on CollectionDB.name
+    before calling get_prompts_page.
+    """
+    q_ilike = f"%{query}%"
+    trgm_threshold = 0.1
+
+    def title_cond():
+        base = PromptDB.title.ilike(q_ilike)
+        if fuzzy:
+            return or_(base, sa_func.similarity(PromptDB.title, query) > trgm_threshold)
+        return base
+
+    def desc_cond():
+        base = PromptDB.description.ilike(q_ilike)
+        if fuzzy:
+            return or_(base, sa_func.similarity(PromptDB.description, query) > trgm_threshold)
+        return base
+
+    def content_cond():
+        # Content is too long for an effective trigram similarity; ILIKE is sufficient.
+        return PromptDB.content.ilike(q_ilike)
+
+    def tags_cond():
+        return sa_func.array_to_string(PromptDB.tags, " ").ilike(q_ilike)
+
+    field_map = {
+        "title": title_cond,
+        "description": desc_cond,
+        "content": content_cond,
+        "tags": tags_cond,
+    }
+    if search_field in field_map:
+        return field_map[search_field]()
+    # "all" or unrecognised — search every text field
+    return or_(title_cond(), desc_cond(), content_cond(), tags_cond())
 
 
 # ---------------------------------------------------------------------------
@@ -27,6 +109,24 @@ def _to_prompt(row: PromptDB) -> Prompt:
         id=row.id,
         title=row.title,
         content=row.content,
+        description=row.description,
+        collection_id=row.collection_id,
+        tags=row.tags,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        version=row.version,
+    )
+
+
+def _to_prompt_summary(row: PromptDB) -> Prompt:
+    """Like _to_prompt but truncates content to CONTENT_PREVIEW_LEN for list views."""
+    content = row.content
+    if len(content) > CONTENT_PREVIEW_LEN:
+        content = content[:CONTENT_PREVIEW_LEN]
+    return Prompt.model_construct(
+        id=row.id,
+        title=row.title,
+        content=content,
         description=row.description,
         collection_id=row.collection_id,
         tags=row.tags,
@@ -111,6 +211,118 @@ class Storage:
         async with AsyncSessionLocal() as session:
             result = await session.execute(select(PromptDB))
             return [_to_prompt(r) for r in result.scalars().all()]
+
+    async def get_prompts_page(
+        self,
+        limit: int = 20,
+        cursor: Optional[str] = None,
+        offset: Optional[int] = None,
+        collection_id: Optional[str] = None,
+        search: Optional[str] = None,
+        fuzzy: bool = True,
+        search_field: str = "all",
+    ) -> Tuple[List[Prompt], Optional[str], int]:
+        """Paginated prompt list with DB-level filtering and search.
+
+        Supports two pagination modes:
+        - **Keyset** (preferred): pass ``cursor`` from a previous response.
+          Stable under concurrent inserts/deletes; returns a ``next_cursor``
+          for the following page.
+        - **Offset** (backward-compat): pass ``offset``.  Uses SQL LIMIT/OFFSET.
+
+        Returns ``(prompts_with_preview, next_cursor, total)`` where:
+        - ``prompts_with_preview`` has content truncated to CONTENT_PREVIEW_LEN.
+        - ``next_cursor`` is None on the last page (or when using offset mode).
+        - ``total`` is the full matching count, ignoring pagination.
+        """
+        async with AsyncSessionLocal() as session:
+            # --- Build base filter conditions (no cursor / offset) -----------
+            base_conditions = []
+            needs_collection_join = False
+
+            if collection_id:
+                base_conditions.append(PromptDB.collection_id == collection_id)
+
+            if search and search.strip():
+                if search_field == "collection":
+                    needs_collection_join = True
+                    base_conditions.append(
+                        CollectionDB.name.ilike(f"%{search}%")
+                    )
+                else:
+                    base_conditions.append(
+                        _build_search_conditions(search, search_field, fuzzy)
+                    )
+
+            # --- Total count (no pagination) ---------------------------------
+            count_stmt = select(sa_func.count()).select_from(PromptDB)
+            if needs_collection_join:
+                count_stmt = count_stmt.join(
+                    CollectionDB,
+                    PromptDB.collection_id == CollectionDB.id,
+                )
+            if base_conditions:
+                count_stmt = count_stmt.where(*base_conditions)
+            total: int = (await session.execute(count_stmt)).scalar_one()
+
+            # --- Fetch statement ----------------------------------------------
+            stmt = (
+                select(PromptDB)
+                .order_by(PromptDB.created_at.desc(), PromptDB.id.desc())
+            )
+            if needs_collection_join:
+                stmt = stmt.join(
+                    CollectionDB,
+                    PromptDB.collection_id == CollectionDB.id,
+                )
+            if base_conditions:
+                stmt = stmt.where(*base_conditions)
+
+            # --- Pagination ---------------------------------------------------
+            next_cursor: Optional[str] = None
+
+            if cursor is not None:
+                # Keyset pagination — decode cursor and add boundary condition
+                cursor_created_at, cursor_id = _decode_cursor(cursor)
+                stmt = stmt.where(
+                    or_(
+                        PromptDB.created_at < cursor_created_at,
+                        and_(
+                            PromptDB.created_at == cursor_created_at,
+                            PromptDB.id < cursor_id,
+                        ),
+                    )
+                )
+                # Fetch one extra row to detect whether a next page exists
+                stmt = stmt.limit(limit + 1)
+                rows = (await session.execute(stmt)).scalars().all()
+
+                has_next = len(rows) > limit
+                if has_next:
+                    rows = rows[:limit]
+                if has_next and rows:
+                    last = rows[-1]
+                    next_cursor = _encode_cursor(last.created_at, last.id)
+
+            elif offset is not None and offset > 0:
+                # SQL offset pagination (backward-compat with existing tests/clients)
+                stmt = stmt.offset(offset).limit(limit)
+                rows = (await session.execute(stmt)).scalars().all()
+
+            else:
+                # First page — no cursor, no offset
+                # Still emit a next_cursor so callers can page forward
+                stmt = stmt.limit(limit + 1)
+                rows = (await session.execute(stmt)).scalars().all()
+
+                has_next = len(rows) > limit
+                if has_next:
+                    rows = rows[:limit]
+                if has_next and rows:
+                    last = rows[-1]
+                    next_cursor = _encode_cursor(last.created_at, last.id)
+
+            return [_to_prompt_summary(r) for r in rows], next_cursor, total
 
     async def update_prompt(self, prompt_id: str, prompt: Prompt) -> Optional[Prompt]:
         async with AsyncSessionLocal() as session:
@@ -356,30 +568,78 @@ class Storage:
             result = await session.execute(stmt)
             return result.scalar_one()
 
+    async def batch_create_prompts(self, prompts: List[Prompt]) -> None:
+        """Insert all prompts in a single transaction without generating embeddings."""
+        if not prompts:
+            return
+        async with AsyncSessionLocal() as session:
+            rows = [
+                PromptDB(
+                    id=p.id,
+                    title=p.title,
+                    content=p.content,
+                    description=p.description,
+                    tags=p.tags,
+                    created_at=p.created_at,
+                    updated_at=p.updated_at,
+                    version=p.version,
+                )
+                for p in prompts
+            ]
+            session.add_all(rows)
+            await session.commit()
+
+    async def batch_set_embeddings(self, updates: List[Tuple[str, List[float]]]) -> None:
+        """Bulk-update embeddings for a list of (prompt_id, embedding) pairs in one transaction."""
+        if not updates:
+            return
+        async with AsyncSessionLocal() as session:
+            for prompt_id, embedding in updates:
+                await session.execute(
+                    update(PromptDB)
+                    .where(PromptDB.id == prompt_id)
+                    .values(embedding=embedding)
+                )
+            await session.commit()
+
     async def backfill_embeddings(self, generate_fn: Callable) -> int:
         """Generate embeddings for all prompts where embedding IS NULL.
 
         generate_fn: sync callable (title, content, description) -> List[float].
         Returns count of prompts updated. Idempotent — skips already-embedded prompts.
+        Runs up to os.cpu_count() embeddings concurrently to utilise multiple cores
+        (torch/numpy release the GIL during encode, so threads run truly in parallel).
         """
         async with AsyncSessionLocal() as session:
             result = await session.execute(
                 select(PromptDB).where(PromptDB.embedding.is_(None))
             )
             rows = result.scalars().all()
-            updated = 0
-            for row in rows:
-                try:
-                    row.embedding = await asyncio.get_event_loop().run_in_executor(
-                        None, generate_fn, row.title, row.content, row.description
-                    )
-                    updated += 1
-                except Exception as exc:
-                    logging.getLogger(__name__).warning(
-                        "Backfill failed for prompt %s: %s", row.id, exc
-                    )
-            await session.commit()
-            return updated
+
+        if not rows:
+            return 0
+
+        concurrency = max(1, os.cpu_count() or 4)
+        sem = asyncio.Semaphore(concurrency)
+        loop = asyncio.get_event_loop()
+
+        async def embed_one(row: PromptDB):
+            async with sem:
+                return row.id, await loop.run_in_executor(
+                    None, generate_fn, row.title, row.content, row.description
+                )
+
+        results = await asyncio.gather(
+            *[embed_one(r) for r in rows], return_exceptions=True
+        )
+        good = []
+        for r in results:
+            if isinstance(r, Exception):
+                logging.getLogger(__name__).warning("Backfill failed: %s", r)
+            else:
+                good.append(r)
+        await self.batch_set_embeddings(good)
+        return len(good)
 
     # ============== Utility ==============
 

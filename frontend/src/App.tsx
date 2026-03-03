@@ -4,12 +4,10 @@ import CollectionsPage from './pages/CollectionsPage';
 import PromptDetail from './components/PromptDetail';
 import Layout from './pages/Layout';
 import { CollectionsProvider } from './contexts/CollectionsContext';
-import { PromptsProvider } from './contexts/PromptsContext';
 import './App.css';
 
 function App() {
   return (
-    <PromptsProvider>
     <CollectionsProvider>
       <Router>
         <Routes>
@@ -21,7 +19,6 @@ function App() {
         </Routes>
       </Router>
     </CollectionsProvider>
-    </PromptsProvider>
   );
 }
 

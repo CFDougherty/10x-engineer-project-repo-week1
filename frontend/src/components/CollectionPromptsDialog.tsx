@@ -11,6 +11,7 @@ import {
 import { Grid } from '@mui/material';
 import { usePrompts } from '../contexts/PromptsContext';
 import { useCollections } from '../contexts/CollectionsContext';
+import type { Prompt } from '../types/prompt';
 import PromptCard from './PromptCard';
 
 interface CollectionPromptsDialogProps {
@@ -35,7 +36,7 @@ export default function CollectionPromptsDialog({
 
   const collectionName = collections.find(c => c.id === collectionId)?.name;
   const collectionPrompts = collectionId
-    ? prompts.filter(p => p.collection_id === collectionId)
+    ? prompts.filter((p: Prompt) => p.collection_id === collectionId)
     : [];
 
   return (

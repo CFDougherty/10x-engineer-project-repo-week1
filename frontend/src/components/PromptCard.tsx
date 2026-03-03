@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Card,
   CardContent,
@@ -11,10 +12,12 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  Divider
+  Divider,
+  CircularProgress,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, History as HistoryIcon } from '@mui/icons-material';
 import { formatDateTime } from '../utils/dateUtils';
+import { getPromptById } from '../services/apiClient';
 
 interface PromptCardProps {
   prompt: {
@@ -34,6 +37,19 @@ interface PromptCardProps {
 
 export default function PromptCard({ prompt, collectionName, onEdit, onDelete, onViewHistory }: PromptCardProps) {
   const [open, setOpen] = useState(false);
+
+  // Fetch the full prompt only when the detail dialog is open.
+  // The list endpoint returns truncated content (≤300 chars); the detail
+  // endpoint always returns the full text.  TanStack Query caches the result
+  // so repeated opens are instant.
+  const { data: fullPrompt, isLoading: loadingFull } = useQuery({
+    queryKey: ['prompt', prompt.id],
+    queryFn: () => getPromptById(prompt.id).then((r) => r.data),
+    enabled: open,
+    staleTime: 30_000,
+  });
+
+  const dialogPrompt = fullPrompt ?? prompt;
 
   return (
     <>
@@ -77,50 +93,56 @@ export default function PromptCard({ prompt, collectionName, onEdit, onDelete, o
       </Card>
 
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{prompt.title}</DialogTitle>
+        <DialogTitle>{dialogPrompt.title}</DialogTitle>
         <DialogContent dividers>
-          {prompt.description && (
-            <Box sx={{ mb: 2 }}>
-              <Divider sx={{ mb: 1 }}>Description</Divider>
-              <Typography variant="body2" sx={{ wordBreak: 'break-word', mt: 1 }}>
-                {prompt.description}
-              </Typography>
+          {loadingFull ? (
+            <Box display="flex" justifyContent="center" py={4}>
+              <CircularProgress size={32} />
             </Box>
-          )}
-          <Box sx={{ mb: 2 }}>
-            <Divider sx={{ mb: 1 }}>Content</Divider>
-            <Typography variant="body1" sx={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', mt: 1 }}>
-              {prompt.content}
-            </Typography>
-          </Box>
-          {prompt.tags && prompt.tags.length > 0 && (
-            <Box sx={{ mb: 2 }}>
-              <Divider sx={{ mb: 1 }}>Tags</Divider>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                {prompt.tags.map((tag: string) => (
-                  <Chip key={tag} label={tag} size="small" />
-                ))}
+          ) : (
+            <>
+              {dialogPrompt.description && (
+                <Box sx={{ mb: 2 }}>
+                  <Divider sx={{ mb: 1 }}>Description</Divider>
+                  <Typography variant="body2" sx={{ wordBreak: 'break-word', mt: 1 }}>
+                    {dialogPrompt.description}
+                  </Typography>
+                </Box>
+              )}
+              <Box sx={{ mb: 2 }}>
+                <Divider sx={{ mb: 1 }}>Content</Divider>
+                <Typography variant="body1" sx={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', mt: 1 }}>
+                  {dialogPrompt.content}
+                </Typography>
               </Box>
-            </Box>
+              {dialogPrompt.tags && dialogPrompt.tags.length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                  <Divider sx={{ mb: 1 }}>Tags</Divider>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                    {dialogPrompt.tags.map((tag: string) => (
+                      <Chip key={tag} label={tag} size="small" />
+                    ))}
+                  </Box>
+                </Box>
+              )}
+              {collectionName && (
+                <Box sx={{ mb: 2 }}>
+                  <Divider sx={{ mb: 1 }}>Collection</Divider>
+                  <Typography variant="body2" sx={{ mt: 1 }}>{collectionName}</Typography>
+                </Box>
+              )}
+              <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mt: 1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Created: {formatDateTime(dialogPrompt.created_at)}
+                </Typography>
+                {dialogPrompt.updated_at && dialogPrompt.updated_at !== dialogPrompt.created_at && (
+                  <Typography variant="caption" color="text.secondary">
+                    Updated: {formatDateTime(dialogPrompt.updated_at)}
+                  </Typography>
+                )}
+              </Box>
+            </>
           )}
-          {collectionName && (
-            <Box sx={{ mb: 2 }}>
-              <Divider sx={{ mb: 1 }}>Collection</Divider>
-              <Typography variant="body2" sx={{ mt: 1 }}>
-                {collectionName}
-              </Typography>
-            </Box>
-          )}
-          <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mt: 1 }}>
-            <Typography variant="caption" color="text.secondary">
-              Created: {formatDateTime(prompt.created_at)}
-            </Typography>
-            {prompt.updated_at && prompt.updated_at !== prompt.created_at && (
-              <Typography variant="caption" color="text.secondary">
-                Updated: {formatDateTime(prompt.updated_at)}
-              </Typography>
-            )}
-          </Box>
         </DialogContent>
         <DialogActions>
           <Box sx={{ flex: 1, display: 'flex', gap: 1 }}>

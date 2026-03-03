@@ -382,16 +382,21 @@ class VersionList(BaseModel):
 # ============== Response Models ==============
 
 class PromptList(BaseModel):
-    """Container model representing a paginated (or summarized) collection of prompts.
+    """Container model representing a paginated collection of prompts.
 
     Attributes:
         prompts (List[Prompt]): The list of `Prompt` items included in this response.
-        total (int): The total number of prompts available (e.g., across all pages),
-            not just the number returned in `prompts`.
+            Content may be truncated to a preview length for list endpoints.
+        total (int): The total number of prompts matching the current filters,
+            regardless of page size (pre-pagination count).
+        next_cursor (Optional[str]): Opaque keyset pagination token.  Pass as
+            the ``cursor`` query parameter to retrieve the next page.  ``None``
+            indicates that this is the last page.
     """
 
     prompts: List[Prompt]
     total: int
+    next_cursor: Optional[str] = None
 
 class CollectionList(BaseModel):
     """Container for a paginated list of collections.

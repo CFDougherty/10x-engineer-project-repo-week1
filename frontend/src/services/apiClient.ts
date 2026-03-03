@@ -9,16 +9,23 @@ const apiClient = axios.create({
   },
 });
 
+export interface PromptsResponse {
+  prompts: any[];
+  total: number;
+  next_cursor: string | null;
+}
+
 // Prompt API endpoints
 export const getPrompts = (params?: {
-  page?: number;
   limit?: number;
-  collectionId?: string;
+  cursor?: string;       // keyset pagination token (preferred over offset)
+  offset?: number;       // legacy SQL offset
+  collection_id?: string;
   search?: string;
-  filter?: string;  // 'title' | 'description' | 'tags' | 'collection' | 'all'
-  sort?: string;
+  filter?: string;       // 'title' | 'description' | 'tags' | 'content' | 'collection' | 'all'
+  fuzzy?: boolean;
   semantic?: boolean;
-}) => apiClient.get('/prompts', { params });
+}) => apiClient.get<PromptsResponse>('/prompts', { params });
 
 export const getPromptById = (id: string) => apiClient.get(`/prompts/${id}`);
 

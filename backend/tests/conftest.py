@@ -67,23 +67,48 @@ async def _ensure_test_db() -> None:
     finally:
         await admin_conn.close()
 
-    # Step 2: enable pgvector in the test database
+    # Step 2: enable extensions in the test database
     test_conn = await asyncpg.connect(
         host=host, port=port, user=user, password=password, database=db_name
     )
     try:
         await test_conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+        await test_conn.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     finally:
         await test_conn.close()
 
 
 @pytest.fixture(scope="session", autouse=True)
 async def setup_test_db():
-    """Ensure the test database exists, then create all tables."""
+    """Ensure the test database exists, then create all tables and indexes."""
+    from sqlalchemy import text
     await _ensure_test_db()
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Performance indexes (same set as init_db — idempotent)
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_prompts_created_at_id "
+            "ON prompts (created_at DESC, id DESC)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_prompts_collection_id "
+            "ON prompts (collection_id) WHERE collection_id IS NOT NULL"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_prompts_title_trgm "
+            "ON prompts USING gin (title gin_trgm_ops)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_prompts_description_trgm "
+            "ON prompts USING gin (description gin_trgm_ops) "
+            "WHERE description IS NOT NULL"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_prompts_embedding_hnsw "
+            "ON prompts USING hnsw (embedding vector_cosine_ops) "
+            "WITH (m = 16, ef_construction = 64)"
+        ))
     yield
 
 

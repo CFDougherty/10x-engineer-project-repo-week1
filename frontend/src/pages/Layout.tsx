@@ -7,46 +7,36 @@ import Header from '../components/Header';
 import AdminToolsDialog from '../components/AdminToolsDialog';
 import EmbeddingStatusBar from '../components/EmbeddingStatusBar';
 import PopulateStatusBar from '../components/PopulateStatusBar';
+import { useQueryClient } from '@tanstack/react-query';
 import { connectSSE, disconnectSSE } from '../services/sseClient';
-import { usePrompts } from '../contexts/PromptsContext';
 import { useCollections } from '../contexts/CollectionsContext';
+import { PROMPTS_QUERY_KEY } from '../contexts/PromptsContext';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [adminDialogOpen, setAdminDialogOpen] = useState(false);
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down('md'));
-  const { refetch: refetchPrompts } = usePrompts();
+  const queryClient = useQueryClient();
   const { refetch: refetchCollections } = useCollections();
 
-  // Connect to SSE when component mounts, disconnect when unmounts
   useEffect(() => {
-    const handleDataChange = async () => {
-      console.log('Received data change notification, refetching...');
-      await refetchPrompts();
-      await refetchCollections();
+    const handleDataChange = () => {
+      // Invalidate all prompt queries (any filter combination).
+      // TanStack Query refetches active queries immediately; inactive ones on next mount.
+      queryClient.invalidateQueries({ queryKey: PROMPTS_QUERY_KEY });
+      refetchCollections();
     };
 
     connectSSE(handleDataChange);
-
-    return () => {
-      disconnectSSE();
-    };
-  }, [refetchPrompts, refetchCollections]);
-
-  const handleAdminClick = () => {
-    setAdminDialogOpen(true);
-  };
-
-  const handleAdminClose = () => {
-    setAdminDialogOpen(false);
-  };
+    return () => disconnectSSE();
+  }, [queryClient, refetchCollections]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <Header
         onMenuClick={() => setSidebarOpen(true)}
         isMobile={isMobile}
-        onAdminClick={handleAdminClick}
+        onAdminClick={() => setAdminDialogOpen(true)}
       />
       <EmbeddingStatusBar />
       <PopulateStatusBar />
@@ -54,7 +44,7 @@ export default function Layout() {
         <Outlet />
       </Box>
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <AdminToolsDialog open={adminDialogOpen} onClose={handleAdminClose} />
+      <AdminToolsDialog open={adminDialogOpen} onClose={() => setAdminDialogOpen(false)} />
     </div>
   );
 }

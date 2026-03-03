@@ -147,7 +147,7 @@ def test_populate_test_data_storage_exception_records_error():
     import app.api as api_module
     api_module._populate_progress.update({"current": 0, "total": 0, "active": False, "error": None})
 
-    with patch.object(storage, "create_prompt", side_effect=RuntimeError("boom")):
+    with patch.object(storage, "batch_create_prompts", side_effect=RuntimeError("boom")):
         response = client.post("/admin/populate-test-data")
 
     assert response.status_code == 202

@@ -25,7 +25,7 @@ import uuid
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Body, Request, status, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Body, Request, status, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
@@ -39,7 +39,6 @@ from app.models import (
     PromptVersion, VersionList, VersionSummary
 )
 from app.storage import storage
-from app.utils import sort_prompts_by_date, filter_prompts_by_collection, search_prompts
 from app import __version__
 
 
@@ -152,33 +151,38 @@ async def list_prompts(
     filter: Optional[str] = None,  # 'title', 'description', 'tags', 'collection', or 'all'
     fuzzy: bool = True,
     semantic: bool = False,
-    limit: Optional[int] = None,
-    offset: Optional[int] = None
+    limit: int = Query(default=20, ge=0),
+    cursor: Optional[str] = None,
+    offset: Optional[int] = Query(default=None, ge=0),
 ):
-    """Lists prompts, optionally filtered by collection and/or a search query.
+    """Lists prompts with server-side filtering, DB-level search, and cursor pagination.
 
-    This endpoint retrieves all prompts from storage, applies an optional
-    collection filter, applies an optional text search filter, then sorts the
-    resulting prompts by date (newest first).
+    Returns prompts with content truncated to a preview length.  Use
+    ``GET /prompts/{id}`` to retrieve the full content of a specific prompt.
+
+    Pagination modes (mutually exclusive; ``cursor`` takes priority):
+    - **Keyset** (recommended): use ``cursor`` from the previous response's
+      ``next_cursor`` field.  Stable under concurrent writes.
+    - **Offset** (legacy): use ``offset`` + ``limit``.  Supported for
+      backward-compatibility with existing clients.
 
     Args:
-        collection_id: Optional collection ID used to filter prompts. If
-            provided, only prompts belonging to this collection are returned.
-        search: Optional search term used to filter prompts. If provided, only
-            prompts matching the query are returned.
-        filter: Optional field to filter search by. One of: 'title', 'description',
-            'tags', 'collection', or 'all'. Default: 'all' (search all fields).
-        fuzzy: If True (default), uses fuzzy string matching for search. If False, uses exact substring matching.
-        semantic: If True, uses vector similarity search instead of lexical search.
-            Requires the embedding model to be loaded and prompts to have embeddings.
-        limit: Optional maximum number of prompts to return.
-        offset: Optional offset for pagination.
+        collection_id: Filter to prompts in this collection.
+        search: Text search query applied server-side via pg_trgm.
+        filter: Field to search. One of 'title', 'description', 'tags',
+            'content', 'collection', or 'all' (default).
+        fuzzy: When True (default) uses pg_trgm similarity in addition to
+            substring matching.  False uses substring-only (ILIKE).
+        semantic: When True uses pgvector cosine similarity instead of text
+            search.  Requires embeddings to be generated.
+        limit: Page size (default 20, min 0).
+        cursor: Opaque keyset cursor from a previous response's ``next_cursor``.
+        offset: Legacy SQL offset for backward-compatible pagination.
 
     Returns:
-        A `PromptList` containing the resulting list of prompts and the total
-        number of prompts returned.
+        PromptList with prompts (preview content), total, and next_cursor.
     """
-    # Semantic search path — bypasses lexical search when a query is provided
+    # ── Semantic search path (unchanged) ─────────────────────────────────────
     if semantic and search and search.strip():
         try:
             from app.embeddings import agenerate_query_embedding
@@ -195,36 +199,26 @@ async def list_prompts(
             collection_id=collection_id,
         )
         total = await storage.count_semantic_results(collection_id=collection_id)
-        return PromptList(prompts=results, total=total)
+        return PromptList(prompts=results, total=total, next_cursor=None)
 
-    all_prompts = await storage.get_all_prompts()
+    # ── Lexical / browse path ─────────────────────────────────────────────────
+    search_field = filter if filter is not None else "all"
 
-    # Filter by collection if specified
-    if collection_id:
-        all_prompts = filter_prompts_by_collection(all_prompts, collection_id)
+    try:
+        prompts, next_cursor, total = await storage.get_prompts_page(
+            limit=limit,
+            cursor=cursor,
+            offset=offset,
+            collection_id=collection_id,
+            search=search,
+            fuzzy=fuzzy,
+            search_field=search_field,
+        )
+    except ValueError as exc:
+        # Invalid cursor string
+        raise HTTPException(status_code=400, detail=str(exc))
 
-    # Search logic
-    if search:
-        # Determine which fields to search based on filter parameter
-        # Default to 'all' if filter is not specified
-        search_filter = filter if filter is not None else 'all'
-
-        # Use search_prompts for all filter types to ensure consistent behavior
-        all_prompts = await search_prompts(all_prompts, search, fuzzy=fuzzy, search_field=search_filter)
-
-    # Sort by date (newest first)
-    all_prompts = sort_prompts_by_date(all_prompts, descending=True)
-
-    # Calculate total before pagination
-    total = len(all_prompts)
-
-    # Apply pagination
-    if offset is not None:
-        all_prompts = all_prompts[offset:]
-    if limit is not None:
-        all_prompts = all_prompts[:limit]
-
-    return PromptList(prompts=all_prompts, total=total)
+    return PromptList(prompts=prompts, total=total, next_cursor=next_cursor)
 
 
 @app.get("/prompts/{prompt_id}", response_model=Prompt)
@@ -707,115 +701,106 @@ async def _do_populate(request: PopulateTestDataRequest) -> None:
         if not request.append_mode:
             await storage.clear()
 
+        # ── Phase 1: build all prompt objects in memory (pure Python, no I/O) ──
         created_prompts = []
-        for i in range(request.num_prompts):
-            topic = random.choice(_PROMPT_TOPICS)
-            modifiers = [
-                "Guide for", "Template for", "Best Practices for",
-                "Checklist for", "Framework for", "Strategy for",
-                "Tactics for", "Approach to", "Methodology for",
-                "How to", "The Art of", "Mastering", "Essentials of"
-            ]
-            modifier = random.choice(modifiers)
-            title = f"{modifier} {topic}"
+        modifiers = [
+            "Guide for", "Template for", "Best Practices for",
+            "Checklist for", "Framework for", "Strategy for",
+            "Tactics for", "Approach to", "Methodology for",
+            "How to", "The Art of", "Mastering", "Essentials of"
+        ]
+        generic_tags = ["AI", "Template", "Best Practices", "Guide", "Framework"]
 
-            # Generate content
-            paragraphs = []
-            paragraphs.append(
+        for _ in range(request.num_prompts):
+            topic = random.choice(_PROMPT_TOPICS)
+            title = f"{random.choice(modifiers)} {topic}"
+
+            paragraphs = [
                 f"This prompt is designed to help with {random.choice(['creating', 'developing', 'improving', 'optimizing'])} "
                 f"{random.choice(['solutions', 'strategies', 'approaches', 'implementations'])} related to {title.lower()}. "
                 f"It provides a structured framework for {random.choice(['generating', 'evaluating', 'documenting', 'testing'])} "
-                f"{random.choice(['ideas', 'code', 'content', 'systems'])} in the context of {title.lower()}."
-            )
-
-            paragraphs.append("Key considerations:")
+                f"{random.choice(['ideas', 'code', 'content', 'systems'])} in the context of {title.lower()}.",
+                "Key considerations:",
+            ]
             for _ in range(3, 8):
                 paragraphs.append(
                     f"- {random.choice(['Consider', 'Evaluate', 'Analyze', 'Document', 'Test'])} the {random.choice(['impact', 'effectiveness', 'quality', 'performance'])} "
                     f"of {random.choice(['your', 'the', 'this'])} {title.lower()} implementation"
                 )
-
             paragraphs.append("\nBest practices:")
             for _ in range(3, 6):
                 paragraphs.append(
                     f"- Always {random.choice(['validate', 'test', 'document', 'review', 'optimize'])} your {title.lower()} "
                     f"before {random.choice(['deployment', 'release', 'sharing', 'presentation'])}"
                 )
-
             paragraphs.append(
                 f"By following this prompt, you should be able to {random.choice(['create', 'develop', 'improve', 'optimize'])} "
                 f"high-quality {title.lower()} solutions that meet your requirements."
             )
 
-            content = "\n\n".join(paragraphs)
-            description = (
-                f"A comprehensive prompt for {title.lower()}, covering key aspects and best practices. "
-                f"This template helps ensure consistency and quality in your {title.lower()} work."
-            )
-
-            # Generate tags
-            relevant_categories = []
             title_lower = title.lower()
-            for category in _TAG_CATEGORIES:
-                for tag in category:
-                    if any(word in title_lower for word in tag.lower().split()):
-                        relevant_categories.append(category)
-                        break
+            relevant_categories = [
+                cat for cat in _TAG_CATEGORIES
+                if any(any(word in title_lower for word in tag.lower().split()) for tag in cat)
+            ] or random.sample(_TAG_CATEGORIES, min(3, len(_TAG_CATEGORIES)))
 
-            if not relevant_categories:
-                relevant_categories = random.sample(_TAG_CATEGORIES, min(3, len(_TAG_CATEGORIES)))
-
-            tags = []
-            for category in relevant_categories[:request.tags_per_prompt]:
-                if category:
-                    tags.append(random.choice(category))
-
+            tags = [random.choice(cat) for cat in relevant_categories[:request.tags_per_prompt] if cat]
             while len(tags) < request.tags_per_prompt:
-                generic_tags = ["AI", "Template", "Best Practices", "Guide", "Framework"]
-                new_tag = random.choice(generic_tags)
-                if new_tag not in tags:
-                    tags.append(new_tag)
-
+                t = random.choice(generic_tags)
+                if t not in tags:
+                    tags.append(t)
             if request.tag_as_test_fill:
                 tags.append("test fill")
 
-            # Create prompt
-            prompt_obj = Prompt(
+            created_prompts.append(Prompt(
                 id=str(uuid.uuid4()),
                 title=title,
-                content=content,
-                description=description,
-                tags=list(set(tags))
-            )
-            await storage.create_prompt(prompt_obj)
-            await storage.create_prompt_version(prompt_obj.id, prompt_obj)
-            created_prompts.append(prompt_obj)
+                content="\n\n".join(paragraphs),
+                description=(
+                    f"A comprehensive prompt for {title.lower()}, covering key aspects and best practices. "
+                    f"This template helps ensure consistency and quality in your {title.lower()} work."
+                ),
+                tags=list(set(tags)),
+            ))
 
-            _populate_progress["current"] = i + 1
+        # ── Phase 2: batch-insert all prompts in one DB round-trip (no embeddings) ──
+        await storage.batch_create_prompts(created_prompts)
+        _populate_progress["current"] = len(created_prompts)
 
-        # Generate collections
+        # ── Phase 3: create versions concurrently (no embeddings) ──
+        ver_sem = asyncio.Semaphore(20)
+
+        async def _create_version(p: Prompt) -> None:
+            async with ver_sem:
+                await storage.create_prompt_version(p.id, p)
+
+        await asyncio.gather(*[_create_version(p) for p in created_prompts])
+
+        # ── Phase 4: create collections + assign prompts in single transactions ──
         created_collections = []
         for _ in range(request.num_collections):
             name = random.choice(_COLLECTION_THEMES)
-            description = (
-                f"A curated collection of prompts focused on {name.lower()}. "
-                f"These templates help standardize and improve your work in this area."
-            )
-
             collection_obj = Collection(
                 id=str(uuid.uuid4()),
                 name=name,
-                description=description
+                description=(
+                    f"A curated collection of prompts focused on {name.lower()}. "
+                    f"These templates help standardize and improve your work in this area."
+                ),
             )
             await storage.create_collection(collection_obj)
             created_collections.append(collection_obj)
 
-        # Randomly assign prompts to collections
-        for prompt in created_prompts:
-            if random.random() < request.collection_chance and created_collections:
-                collection = random.choice(created_collections)
-                prompt.collection_id = collection.id
-                await storage.update_prompt(prompt.id, prompt)
+        if created_collections:
+            assign_sem = asyncio.Semaphore(20)
+
+            async def _assign(prompt: Prompt) -> None:
+                if random.random() < request.collection_chance:
+                    prompt.collection_id = random.choice(created_collections).id
+                    async with assign_sem:
+                        await storage.update_prompt(prompt.id, prompt)
+
+            await asyncio.gather(*[_assign(p) for p in created_prompts])
 
         _populate_progress["prompts_created"] = len(created_prompts)
         _populate_progress["collections_created"] = len(created_collections)
@@ -824,7 +809,7 @@ async def _do_populate(request: PopulateTestDataRequest) -> None:
         # Notify clients about data change
         await notify_sse_clients('{"event": "data_changed", "message": "Test data populated", "action": "populate"}')
 
-        # Kick off embedding generation server-side (client is already gone)
+        # ── Phase 5: parallel embedding backfill (uses all CPU cores via thread pool) ──
         try:
             from app.embeddings import generate_embedding
             await storage.backfill_embeddings(generate_fn=generate_embedding)

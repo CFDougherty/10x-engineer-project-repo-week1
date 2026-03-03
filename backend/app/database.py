@@ -62,9 +62,37 @@ def AsyncSessionLocal() -> AsyncSession:
 
 
 async def init_db():
-    """Create all tables. Called from the FastAPI lifespan handler."""
+    """Create all tables and performance indexes. Called from the FastAPI lifespan handler."""
+    from sqlalchemy import text
     from app.database import Base  # noqa — triggers model registration via models_db import
     import app.models_db  # noqa: F401
     engine = get_engine()
     async with engine.begin() as conn:
+        # Extensions (idempotent)
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+        # Tables
         await conn.run_sync(Base.metadata.create_all)
+        # Performance indexes (idempotent — safe to run on every startup)
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_prompts_created_at_id "
+            "ON prompts (created_at DESC, id DESC)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_prompts_collection_id "
+            "ON prompts (collection_id) WHERE collection_id IS NOT NULL"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_prompts_title_trgm "
+            "ON prompts USING gin (title gin_trgm_ops)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_prompts_description_trgm "
+            "ON prompts USING gin (description gin_trgm_ops) "
+            "WHERE description IS NOT NULL"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_prompts_embedding_hnsw "
+            "ON prompts USING hnsw (embedding vector_cosine_ops) "
+            "WITH (m = 16, ef_construction = 64)"
+        ))
