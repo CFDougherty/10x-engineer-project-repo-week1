@@ -53,7 +53,7 @@ export default function PromptCard({ prompt, collectionName, onEdit, onDelete, o
 
   return (
     <>
-      <Card sx={{ cursor: 'pointer', transition: 'box-shadow 0.3s', width: 350, overflow: 'hidden' }}>
+      <Card sx={{ cursor: 'pointer', transition: 'box-shadow 0.3s', width: '100%', overflow: 'hidden' }}>
         <CardContent onClick={() => setOpen(true)}>
           <Box display="flex" justifyContent="space-between" alignItems="start">
             <Typography variant="h5" component="div" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
