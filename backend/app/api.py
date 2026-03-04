@@ -741,9 +741,9 @@ async def _do_populate(request: PopulateTestDataRequest) -> None:
 
                 created_prompts.append(Prompt(
                     id=str(uuid.uuid4()),
-                    title=title,
+                    title=title[:190],
                     content=content,
-                    description=description[:500] if description else None,
+                    description=description[:490] if description else None,
                     tags=list(set(tags)),
                 ))
         else:
@@ -886,7 +886,7 @@ async def populate_test_data(
     else:
         random.seed()
 
-    _populate_progress = {"current": 0, "total": request.num_prompts, "active": True, "error": None}
+    _populate_progress = {"current": 0, "total": request.num_prompts, "active": True, "error": None, "prompts_created": 0, "collections_created": 0}
 
     background_tasks.add_task(_do_populate, request)
 
