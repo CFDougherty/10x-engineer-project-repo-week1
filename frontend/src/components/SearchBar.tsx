@@ -1,6 +1,6 @@
 import { TextField, InputAdornment, Select, MenuItem, FormControl, CircularProgress, Tooltip, IconButton } from '@mui/material';
 import type { TextFieldProps } from '@mui/material';
-import { Search as SearchIcon, Psychology as PsychologyIcon } from '@mui/icons-material';
+import { Search as SearchIcon, Psychology as PsychologyIcon, Clear as ClearIcon } from '@mui/icons-material';
 import { useRef, useEffect } from 'react';
 
 interface SearchBarProps extends Omit<TextFieldProps, 'onChange' | 'value'> {
@@ -11,6 +11,7 @@ interface SearchBarProps extends Omit<TextFieldProps, 'onChange' | 'value'> {
   searchField?: string;
   onSearchFieldChange?: (field: string) => void;
   onSearch?: () => void;
+  onClear?: () => void;
   loading?: boolean;
   semantic?: boolean;
   onSemanticChange?: (semantic: boolean) => void;
@@ -24,6 +25,7 @@ export default function SearchBar({
   searchField = 'all',
   onSearchFieldChange,
   onSearch,
+  onClear,
   loading = false,
   semantic = false,
   onSemanticChange,
@@ -70,6 +72,13 @@ export default function SearchBar({
               {loading ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
             </InputAdornment>
           ),
+          endAdornment: value ? (
+            <InputAdornment position="end">
+              <IconButton size="small" onClick={onClear} edge="end">
+                <ClearIcon fontSize="small" />
+              </IconButton>
+            </InputAdornment>
+          ) : undefined,
         }}
         sx={{
           backgroundColor: 'background.paper',

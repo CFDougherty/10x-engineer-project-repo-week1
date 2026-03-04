@@ -10,7 +10,8 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  Divider
+  Divider,
+  Chip
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { formatDateTime } from '../utils/dateUtils';
@@ -35,8 +36,8 @@ export default function CollectionCard({ collection, promptCount, onEdit, onDele
 
   return (
     <>
-      <Card sx={{ cursor: 'pointer', transition: 'box-shadow 0.3s', width: '100%', minHeight: '20rem', overflow: 'hidden' }}>
-        <CardContent onClick={() => setOpen(true)}>
+      <Card sx={{ cursor: 'pointer', transition: 'box-shadow 0.3s', width: '100%', minHeight: '20rem', display: 'flex', flexDirection: 'column' }}>
+        <CardContent onClick={() => setOpen(true)} sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
           <Box display="flex" justifyContent="space-between" alignItems="start">
             <Typography variant="h5" component="div" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {collection.name}
@@ -61,9 +62,9 @@ export default function CollectionCard({ collection, promptCount, onEdit, onDele
             </Typography>
           )}
 
-          <Typography variant="body2">
-            {promptCount} {promptCount === 1 ? 'prompt' : 'prompts'}
-          </Typography>
+          <Box sx={{ mt: 'auto', pt: 1 }}>
+            <Chip label={`${promptCount} ${promptCount === 1 ? 'prompt' : 'prompts'}`} size="small" />
+          </Box>
         </CardContent>
       </Card>
 

@@ -143,9 +143,15 @@ export default function PromptsPage() {
 
   const handleSemanticToggle = (next: boolean) => {
     setSemantic(next);
-    setSubmittedSearch('');
-    setSearchInput('');
+    setSubmittedSearch(searchInput);
   };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSubmittedSearch(searchInput);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const handleEdit = async (promptId: string) => {
     // List responses carry truncated content; fetch the full prompt before editing
@@ -228,6 +234,7 @@ export default function PromptsPage() {
               value={searchInput}
               onChange={setSearchInput}
               onSearch={handleSearch}
+              onClear={() => { setSearchInput(''); setSubmittedSearch(''); }}
               searchField={filter}
               onSearchFieldChange={setFilter}
               placeholder="Search prompts..."
