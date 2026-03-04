@@ -307,6 +307,8 @@ def main():
                        help="Clear existing data before populating")
     parser.add_argument("--dry-run", action="store_true",
                        help="Generate data without sending to API")
+    parser.add_argument("--data-source", choices=["template", "dataset"], default="dataset",
+                       help="Content source: 'dataset' (HuggingFace, default) or 'template' (built-in generator)")
 
     args = parser.parse_args()
 
@@ -316,11 +318,49 @@ def main():
     print(f"Collections to create: {args.collections}")
     print(f"Clear existing data: {args.clear}")
     print(f"Dry run: {args.dry_run}")
+    print(f"Data source: {args.data_source}")
     print()
 
     # Initialize generator and client
     generator = TestDataGenerator()
     client = APIClient(base_url=args.base_url)
+
+    # ── Dataset mode: delegate entirely to the server-side admin endpoint ──
+    if args.data_source == "dataset" and not args.dry_run:
+        payload = {
+            "num_prompts": args.prompts,
+            "num_collections": args.collections,
+            "append_mode": not args.clear,
+            "data_source": "dataset",
+        }
+        print("Starting server-side population from HuggingFace dataset...")
+        print("(First run downloads ~4 MB; subsequent runs use the local cache.)\n")
+        resp = client.session.post(f"{args.base_url}/admin/populate-test-data", json=payload)
+        if resp.status_code == 409:
+            print("✗ A population job is already running. Try again after it finishes.")
+            return
+        resp.raise_for_status()
+
+        # Poll progress until done
+        while True:
+            status = client.session.get(f"{args.base_url}/admin/populate-status").json()
+            current = status.get("current", 0)
+            total = status.get("total", args.prompts)
+            error = status.get("error")
+            active = status.get("active", True)
+            pct = int(current / total * 100) if total else 0
+            print(f"  Progress: {current}/{total} ({pct}%)", end="\r", flush=True)
+            if error:
+                print(f"\n✗ Error during population: {error}")
+                return
+            if not active:
+                break
+            time.sleep(1)
+
+        print(f"\n✓ Created {status.get('prompts_created', args.prompts)} prompts "
+              f"in {status.get('collections_created', args.collections)} collections")
+        print("\nTest data population complete!")
+        return
 
     # Clear existing data if requested
     if args.clear and not args.dry_run:

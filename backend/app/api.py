@@ -29,7 +29,7 @@ from fastapi import FastAPI, HTTPException, Body, Request, status, BackgroundTas
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
-from typing import Optional
+from typing import Literal, Optional
 
 from app.models import (
     Prompt, PromptCreate, PromptUpdate, PromptUpdateOptional,
@@ -655,6 +655,7 @@ class PopulateTestDataRequest(_BaseModel):
     random_seed: Optional[int] = None
     tag_as_test_fill: bool = False
     append_mode: bool = False
+    data_source: Literal["template", "dataset"] = "dataset"
 
 _populate_progress: dict = {"current": 0, "total": 0, "active": False, "error": None}
 
@@ -709,66 +710,101 @@ async def _do_populate(request: PopulateTestDataRequest) -> None:
             await storage.clear()
 
         # ── Phase 1: build all prompt objects in memory (pure Python, no I/O) ──
+        rng = random.Random(request.random_seed)
         created_prompts = []
-        modifiers = [
-            "Guide for", "Template for", "Best Practices for",
-            "Checklist for", "Framework for", "Strategy for",
-            "Tactics for", "Approach to", "Methodology for",
-            "How to", "The Art of", "Mastering", "Essentials of"
-        ]
-        for _ in range(request.num_prompts):
-            topic = random.choice(_PROMPT_TOPICS)
-            title = f"{random.choice(modifiers)} {topic}"
 
-            paragraphs = [
-                f"This prompt is designed to help with {random.choice(['creating', 'developing', 'improving', 'optimizing'])} "
-                f"{random.choice(['solutions', 'strategies', 'approaches', 'implementations'])} related to {title.lower()}. "
-                f"It provides a structured framework for {random.choice(['generating', 'evaluating', 'documenting', 'testing'])} "
-                f"{random.choice(['ideas', 'code', 'content', 'systems'])} in the context of {title.lower()}.",
-                "Key considerations:",
+        if request.data_source == "dataset":
+            from app.prompt_pool import get_pool
+            samples = get_pool().sample(rng, request.num_prompts)
+            for sample in samples:
+                title = sample["title"]
+                content = sample["content"]
+                title_lower = title.lower()
+
+                relevant_categories = [
+                    cat for cat in _TAG_CATEGORIES
+                    if any(any(word in title_lower for word in tag.lower().split()) for tag in cat)
+                ] or rng.sample(_TAG_CATEGORIES, min(3, len(_TAG_CATEGORIES)))
+
+                tags_set: set[str] = {rng.choice(cat) for cat in relevant_categories if cat}
+                if len(tags_set) < request.tags_per_prompt:
+                    flat_pool = [t for cat in _TAG_CATEGORIES for t in cat if t not in tags_set]
+                    rng.shuffle(flat_pool)
+                    tags_set.update(flat_pool[: request.tags_per_prompt - len(tags_set)])
+                tags = list(tags_set)[: request.tags_per_prompt]
+                if request.tag_as_test_fill:
+                    tags.append("test fill")
+
+                # Use the first sentence of content as description
+                first_sentence = content.split(".")[0].strip()
+                description = (first_sentence + ".") if first_sentence and not first_sentence.endswith(".") else first_sentence
+
+                created_prompts.append(Prompt(
+                    id=str(uuid.uuid4()),
+                    title=title,
+                    content=content,
+                    description=description[:500] if description else None,
+                    tags=list(set(tags)),
+                ))
+        else:
+            modifiers = [
+                "Guide for", "Template for", "Best Practices for",
+                "Checklist for", "Framework for", "Strategy for",
+                "Tactics for", "Approach to", "Methodology for",
+                "How to", "The Art of", "Mastering", "Essentials of"
             ]
-            for _ in range(3, 8):
+            for _ in range(request.num_prompts):
+                topic = rng.choice(_PROMPT_TOPICS)
+                title = f"{rng.choice(modifiers)} {topic}"
+
+                paragraphs = [
+                    f"This prompt is designed to help with {rng.choice(['creating', 'developing', 'improving', 'optimizing'])} "
+                    f"{rng.choice(['solutions', 'strategies', 'approaches', 'implementations'])} related to {title.lower()}. "
+                    f"It provides a structured framework for {rng.choice(['generating', 'evaluating', 'documenting', 'testing'])} "
+                    f"{rng.choice(['ideas', 'code', 'content', 'systems'])} in the context of {title.lower()}.",
+                    "Key considerations:",
+                ]
+                for _ in range(3, 8):
+                    paragraphs.append(
+                        f"- {rng.choice(['Consider', 'Evaluate', 'Analyze', 'Document', 'Test'])} the {rng.choice(['impact', 'effectiveness', 'quality', 'performance'])} "
+                        f"of {rng.choice(['your', 'the', 'this'])} {title.lower()} implementation"
+                    )
+                paragraphs.append("\nBest practices:")
+                for _ in range(3, 6):
+                    paragraphs.append(
+                        f"- Always {rng.choice(['validate', 'test', 'document', 'review', 'optimize'])} your {title.lower()} "
+                        f"before {rng.choice(['deployment', 'release', 'sharing', 'presentation'])}"
+                    )
                 paragraphs.append(
-                    f"- {random.choice(['Consider', 'Evaluate', 'Analyze', 'Document', 'Test'])} the {random.choice(['impact', 'effectiveness', 'quality', 'performance'])} "
-                    f"of {random.choice(['your', 'the', 'this'])} {title.lower()} implementation"
+                    f"By following this prompt, you should be able to {rng.choice(['create', 'develop', 'improve', 'optimize'])} "
+                    f"high-quality {title.lower()} solutions that meet your requirements."
                 )
-            paragraphs.append("\nBest practices:")
-            for _ in range(3, 6):
-                paragraphs.append(
-                    f"- Always {random.choice(['validate', 'test', 'document', 'review', 'optimize'])} your {title.lower()} "
-                    f"before {random.choice(['deployment', 'release', 'sharing', 'presentation'])}"
-                )
-            paragraphs.append(
-                f"By following this prompt, you should be able to {random.choice(['create', 'develop', 'improve', 'optimize'])} "
-                f"high-quality {title.lower()} solutions that meet your requirements."
-            )
 
-            title_lower = title.lower()
-            relevant_categories = [
-                cat for cat in _TAG_CATEGORIES
-                if any(any(word in title_lower for word in tag.lower().split()) for tag in cat)
-            ] or random.sample(_TAG_CATEGORIES, min(3, len(_TAG_CATEGORIES)))
+                title_lower = title.lower()
+                relevant_categories = [
+                    cat for cat in _TAG_CATEGORIES
+                    if any(any(word in title_lower for word in tag.lower().split()) for tag in cat)
+                ] or rng.sample(_TAG_CATEGORIES, min(3, len(_TAG_CATEGORIES)))
 
-            tags_set: set[str] = {random.choice(cat) for cat in relevant_categories if cat}
-            if len(tags_set) < request.tags_per_prompt:
-                # Draw from the full flat tag pool to avoid exhausting the small generic list
-                pool = [t for cat in _TAG_CATEGORIES for t in cat if t not in tags_set]
-                random.shuffle(pool)
-                tags_set.update(pool[:request.tags_per_prompt - len(tags_set)])
-            tags = list(tags_set)[:request.tags_per_prompt]
-            if request.tag_as_test_fill:
-                tags.append("test fill")
+                tags_set = {rng.choice(cat) for cat in relevant_categories if cat}
+                if len(tags_set) < request.tags_per_prompt:
+                    flat_pool = [t for cat in _TAG_CATEGORIES for t in cat if t not in tags_set]
+                    rng.shuffle(flat_pool)
+                    tags_set.update(flat_pool[: request.tags_per_prompt - len(tags_set)])
+                tags = list(tags_set)[: request.tags_per_prompt]
+                if request.tag_as_test_fill:
+                    tags.append("test fill")
 
-            created_prompts.append(Prompt(
-                id=str(uuid.uuid4()),
-                title=title,
-                content="\n\n".join(paragraphs),
-                description=(
-                    f"A comprehensive prompt for {title.lower()}, covering key aspects and best practices. "
-                    f"This template helps ensure consistency and quality in your {title.lower()} work."
-                ),
-                tags=list(set(tags)),
-            ))
+                created_prompts.append(Prompt(
+                    id=str(uuid.uuid4()),
+                    title=title,
+                    content="\n\n".join(paragraphs),
+                    description=(
+                        f"A comprehensive prompt for {title.lower()}, covering key aspects and best practices. "
+                        f"This template helps ensure consistency and quality in your {title.lower()} work."
+                    ),
+                    tags=list(set(tags)),
+                ))
 
         # ── Phase 2: batch-insert all prompts in one DB round-trip (no embeddings) ──
         await storage.batch_create_prompts(created_prompts)
@@ -786,7 +822,7 @@ async def _do_populate(request: PopulateTestDataRequest) -> None:
         # ── Phase 4: create collections + assign prompts in single transactions ──
         created_collections = []
         for _ in range(request.num_collections):
-            name = random.choice(_COLLECTION_THEMES)
+            name = rng.choice(_COLLECTION_THEMES)
             collection_obj = Collection(
                 id=str(uuid.uuid4()),
                 name=name,
@@ -802,8 +838,8 @@ async def _do_populate(request: PopulateTestDataRequest) -> None:
             assign_sem = asyncio.Semaphore(20)
 
             async def _assign(prompt: Prompt) -> None:
-                if random.random() < request.collection_chance:
-                    prompt.collection_id = random.choice(created_collections).id
+                if rng.random() < request.collection_chance:
+                    prompt.collection_id = rng.choice(created_collections).id
                     async with assign_sem:
                         await storage.update_prompt(prompt.id, prompt)
 
