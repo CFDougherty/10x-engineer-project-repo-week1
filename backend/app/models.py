@@ -1,10 +1,13 @@
 """Pydantic models for PromptLab."""
 
+import logging
 from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from uuid import uuid4, UUID
 import html
+
+logger = logging.getLogger(__name__)
 
 def sanitize_html(text: str) -> str:
     """Sanitize HTML content to prevent XSS attacks.
@@ -165,11 +168,29 @@ class Prompt(PromptBase):
     def __init__(self, **data):
         """Initialize a Prompt instance and sanitize HTML content."""
         if 'title' in data and data['title'] is not None:
-            data['title'] = sanitize_html(data['title'])
+            raw = data['title']
+            sanitized = sanitize_html(raw)
+            if len(sanitized) > 200 and len(raw) <= 200:
+                logger.warning(
+                    "Prompt title expanded to %d chars after HTML sanitization "
+                    "(input contained special chars); truncating to 200: %r...",
+                    len(sanitized), sanitized[:60]
+                )
+                sanitized = sanitized[:200]
+            data['title'] = sanitized
         if 'content' in data and data['content'] is not None:
             data['content'] = sanitize_html(data['content'])
         if 'description' in data and data['description'] is not None:
-            data['description'] = sanitize_html(data['description'])
+            raw = data['description']
+            sanitized = sanitize_html(raw)
+            if len(sanitized) > 500 and len(raw) <= 500:
+                logger.warning(
+                    "Prompt description expanded to %d chars after HTML sanitization; "
+                    "truncating to 500",
+                    len(sanitized)
+                )
+                sanitized = sanitized[:500]
+            data['description'] = sanitized
         super().__init__(**data)
 
     def __setattr__(self, name, value):

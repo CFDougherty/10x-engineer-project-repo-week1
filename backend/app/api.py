@@ -20,10 +20,13 @@ Note:
     headers, so credentials support is not required.
 """
 
+import logging
 import random
 import uuid
 import asyncio
 from contextlib import asynccontextmanager
+
+logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, HTTPException, Body, Request, status, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -645,7 +648,7 @@ async def sse_endpoint(request: Request):
 
 # ============== Admin Endpoints ==============
 
-from pydantic import BaseModel as _BaseModel
+from pydantic import BaseModel as _BaseModel, ValidationError
 
 class PopulateTestDataRequest(_BaseModel):
     num_prompts: int = 40
@@ -739,13 +742,17 @@ async def _do_populate(request: PopulateTestDataRequest) -> None:
                 first_sentence = content.split(".")[0].strip()
                 description = (first_sentence + ".") if first_sentence and not first_sentence.endswith(".") else first_sentence
 
-                created_prompts.append(Prompt(
-                    id=str(uuid.uuid4()),
-                    title=title[:190],
-                    content=content,
-                    description=description[:490] if description else None,
-                    tags=list(set(tags)),
-                ))
+                try:
+                    created_prompts.append(Prompt(
+                        id=str(uuid.uuid4()),
+                        title=title[:190],
+                        content=content,
+                        description=description[:490] if description else None,
+                        tags=list(set(tags)),
+                    ))
+                except ValidationError as exc:
+                    logger.warning("[populate] Skipping dataset prompt — validation error: %s", exc)
+                    _populate_progress["skipped"] += 1
         else:
             modifiers = [
                 "Guide for", "Template for", "Best Practices for",
@@ -795,16 +802,20 @@ async def _do_populate(request: PopulateTestDataRequest) -> None:
                 if request.tag_as_test_fill:
                     tags.append("test fill")
 
-                created_prompts.append(Prompt(
-                    id=str(uuid.uuid4()),
-                    title=title,
-                    content="\n\n".join(paragraphs),
-                    description=(
-                        f"A comprehensive prompt for {title.lower()}, covering key aspects and best practices. "
-                        f"This template helps ensure consistency and quality in your {title.lower()} work."
-                    ),
-                    tags=list(set(tags)),
-                ))
+                try:
+                    created_prompts.append(Prompt(
+                        id=str(uuid.uuid4()),
+                        title=title,
+                        content="\n\n".join(paragraphs),
+                        description=(
+                            f"A comprehensive prompt for {title.lower()}, covering key aspects and best practices. "
+                            f"This template helps ensure consistency and quality in your {title.lower()} work."
+                        ),
+                        tags=list(set(tags)),
+                    ))
+                except ValidationError as exc:
+                    logger.warning("[populate] Skipping template prompt — validation error: %s", exc)
+                    _populate_progress["skipped"] += 1
 
         # ── Phase 2: batch-insert all prompts in one DB round-trip (no embeddings) ──
         await storage.batch_create_prompts(created_prompts)
@@ -886,7 +897,7 @@ async def populate_test_data(
     else:
         random.seed()
 
-    _populate_progress = {"current": 0, "total": request.num_prompts, "active": True, "error": None, "prompts_created": 0, "collections_created": 0}
+    _populate_progress = {"current": 0, "total": request.num_prompts, "active": True, "error": None, "prompts_created": 0, "collections_created": 0, "skipped": 0}
 
     background_tasks.add_task(_do_populate, request)
 
