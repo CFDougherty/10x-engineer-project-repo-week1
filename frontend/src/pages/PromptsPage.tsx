@@ -275,7 +275,7 @@ export default function PromptsPage() {
           <Typography variant="caption" color="white">
             {searchMode === 'keyword' && 'Keyword mode — exact text matching'}
             {searchMode === 'fuzzy' && 'Fuzzy mode — approximate text matching'}
-            {searchMode === 'semantic' && 'Semantic mode — press Enter or click search to query by meaning'}
+            {searchMode === 'semantic' && 'Semantic mode — search by meaning'}
           </Typography>
         </Box>
         <Button
