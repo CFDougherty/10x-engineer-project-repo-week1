@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -39,17 +39,20 @@ export default function CollectionPromptsDialog({
   const { collections } = useCollections();
 
   // ── Responsive column count ───────────────────────────────────────────────
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [cols, setCols] = useState(2);
-  useEffect(() => {
-    const el = containerRef.current;
+  // Callback ref fires as soon as the node mounts inside MUI's portal,
+  // avoiding the stale-null problem with useRef + useEffect(,[open]).
+  const obsRef = useRef<ResizeObserver | null>(null);
+  const [cols, setCols] = useState(1);
+  const containerRef = useCallback((el: HTMLDivElement | null) => {
+    obsRef.current?.disconnect();
+    obsRef.current = null;
     if (!el) return;
     const obs = new ResizeObserver(([entry]) => {
       setCols(entry.contentRect.width > 600 ? 2 : 1);
     });
     obs.observe(el);
-    return () => obs.disconnect();
-  }, [open]);
+    obsRef.current = obs;
+  }, []);
 
   // ── Scroll tracking inside DialogContent ─────────────────────────────────
   // Callback ref: fires the moment the DOM node mounts (regardless of MUI Dialog's
@@ -96,6 +99,7 @@ export default function CollectionPromptsDialog({
                   <PromptCard
                     key={prompt.id}
                     prompt={prompt}
+                    cols={cols}
                     collectionName={collectionName}
                     onEdit={onPromptEdit}
                     onDelete={onPromptDelete}

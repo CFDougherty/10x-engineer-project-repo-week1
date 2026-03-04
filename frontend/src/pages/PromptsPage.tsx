@@ -71,7 +71,7 @@ export default function PromptsPage() {
     if (!el) return;
     const obs = new ResizeObserver(([entry]) => {
       const w = entry.contentRect.width;
-      setCols(w > 960 ? 3 : w > 640 ? 2 : 1);
+      setCols(w > 960 ? 4 : w > 640 ? 3 : w > 400 ? 2 : 1);
     });
     obs.observe(el);
     obsRef.current = obs;
@@ -173,7 +173,7 @@ export default function PromptsPage() {
 
   const virtualizer = useWindowVirtualizer({
     count: rowCount,
-    estimateSize: () => 310, // px — measured dynamically after first render
+    estimateSize: () => 370, // px — measured dynamically after first render
     overscan: 3,
   });
 
@@ -394,6 +394,7 @@ export default function PromptsPage() {
                       <PromptCard
                         key={prompt.id}
                         prompt={prompt}
+                        cols={cols}
                         collectionName={
                           collections.find((c) => c.id === prompt.collection_id)?.name
                         }

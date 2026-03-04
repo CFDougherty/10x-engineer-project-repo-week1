@@ -136,8 +136,7 @@ export default function CollectionsPage() {
       ) : (
         <Grid container spacing={3}>
           {collections.map((collection) => (
-            // @ts-expect-error - collection type has missing properties
-            <Grid key={collection.id} item xs={12} sm={6} md={4} sx={{ display: 'flex' }}>
+            <Grid key={collection.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }} sx={{ display: 'flex' }}>
               <CollectionCard
                 collection={collection}
                 promptCount={allPrompts.filter((p: Prompt) => p.collection_id === collection.id).length}
