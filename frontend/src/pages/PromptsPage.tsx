@@ -11,7 +11,6 @@ import {
   Box,
   MenuItem,
   FormControl,
-  InputLabel,
   Select,
   Fab,
 } from '@mui/material';
@@ -244,10 +243,14 @@ export default function PromptsPage() {
               sx={{ flexGrow: 1 }}
               extraControls={
                 <FormControl size="small" sx={{ flexBasis: { xs: '100%', sm: 'auto' }, minWidth: { sm: 200 } }}>
-                  <InputLabel>Filter by Collection</InputLabel>
                   <Select
                     value={selectedCollection}
-                    label="Filter by Collection"
+                    displayEmpty
+                    renderValue={(value) => {
+                      if (value === '') return <span style={{ opacity: 0.5 }}>Filter by Collection</span>;
+                      if (value === '__none__') return 'Not in any collection';
+                      return collections.find(c => c.id === value)?.name ?? String(value);
+                    }}
                     onChange={(e) => setSelectedCollection(e.target.value)}
                     sx={{ backgroundColor: 'background.paper', borderRadius: 1 }}
                     MenuProps={{
