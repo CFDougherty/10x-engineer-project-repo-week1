@@ -13,8 +13,9 @@ import {
   FormControl,
   InputLabel,
   Select,
+  Fab,
 } from '@mui/material';
-import { Add as AddIcon } from '@mui/icons-material';
+import { Add as AddIcon, KeyboardArrowUp as KeyboardArrowUpIcon } from '@mui/icons-material';
 import PromptFormDialog from '../components/PromptCreationDialog';
 import SearchBar from '../components/SearchBar';
 import Button from '../components/Button';
@@ -49,6 +50,15 @@ export default function PromptsPage() {
 
   const { collections } = useCollections();
   const { create, update, remove, refetch } = usePrompts();
+
+  // ── Scroll tracking (scroll-to-top + position indicator) ─────────────────
+  const [scrollY, setScrollY] = useState(0);
+  useEffect(() => {
+    const handle = () => setScrollY(window.scrollY);
+    window.addEventListener('scroll', handle, { passive: true });
+    return () => window.removeEventListener('scroll', handle);
+  }, []);
+  const showScrollTop = scrollY > 400;
 
   // ── Column count (responsive, measured via ResizeObserver) ────────────────
   const containerRef = useRef<HTMLDivElement>(null);
@@ -292,6 +302,54 @@ export default function PromptsPage() {
             ? 'No semantically similar prompts found. Try a different query or run backfill if embeddings are not yet generated.'
             : 'No prompts found. Create your first prompt!'}
         </Alert>
+      )}
+
+      {/* Position indicator */}
+      {(() => {
+        const virtualItems = virtualizer.getVirtualItems();
+        const lastContentRow = [...virtualItems].reverse().find(v => v.index < rows.length);
+        const currentIndex = lastContentRow
+          ? Math.min((lastContentRow.index + 1) * cols, displayedPrompts.length)
+          : 0;
+        const apiTotal = data?.pages.at(-1)?.total ?? 0;
+        const isNoneFilter = selectedCollection === '__none__';
+        const displayTotal = isNoneFilter
+          ? `${displayedPrompts.length}${hasNextPage ? '+' : ''}`
+          : apiTotal;
+        return displayedPrompts.length > 0 ? (
+          <Box
+            sx={{
+              position: 'fixed',
+              bottom: 24,
+              left: 24,
+              zIndex: 1200,
+              bgcolor: 'background.paper',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 2,
+              px: 1.5,
+              py: 0.5,
+              typography: 'caption',
+              color: 'text.secondary',
+              boxShadow: 1,
+              userSelect: 'none',
+            }}
+          >
+            {currentIndex} / {displayTotal}
+          </Box>
+        ) : null;
+      })()}
+
+      {/* Scroll-to-top button */}
+      {showScrollTop && (
+        <Fab
+          size="small"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          sx={{ position: 'fixed', bottom: 24, right: 24, zIndex: 1200 }}
+          aria-label="Scroll to top"
+        >
+          <KeyboardArrowUpIcon />
+        </Fab>
       )}
 
       {/* Virtualised card grid */}

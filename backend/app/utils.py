@@ -124,39 +124,37 @@ async def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True, 
 
         # Find matches in each field
         for field_name, field in fields_to_check:
-            # Use a more strict distance threshold
-            # For single-character queries, use max_dist=0 for exact match
-            # For longer queries, use max_dist=half the query length
             query_len = len(query_lower)
-            max_dist = 0 if query_len == 1 else max(1, query_len // 2)
-            near_matches = find_near_matches(
-                query_lower,
-                field,
-                max_l_dist=max_dist
-            )
+            best_start: int | None = None
+            best_dist: int = 0
 
-            if near_matches:
-                # Only consider matches with reasonable distance
-                # For single-character queries, distance should be 0 (exact match)
-                # For longer queries, distance should be small relative to query length
-                if query_len == 1:
-                    # For single character, require exact match (distance 0)
-                    good_matches = [m for m in near_matches if m.dist == 0]
-                else:
-                    # For longer queries, allow small distance
-                    max_allowed_dist = min(2, query_len // 2)
-                    good_matches = [m for m in near_matches if m.dist <= max_allowed_dist]
+            # Exact substring check first — always reliable, including homogeneous
+            # strings where fuzzysearch is unreliable with large max_l_dist.
+            if query_lower in field:
+                best_start = field.index(query_lower)
+                best_dist = 0
+            else:
+                max_dist = 0 if query_len == 1 else max(1, query_len // 2)
+                near_matches = find_near_matches(query_lower, field, max_l_dist=max_dist)
+                if near_matches:
+                    if query_len == 1:
+                        good_matches = [m for m in near_matches if m.dist == 0]
+                    else:
+                        max_allowed_dist = min(2, query_len // 2)
+                        good_matches = [m for m in near_matches if m.dist <= max_allowed_dist]
+                    if good_matches:
+                        best = min(good_matches, key=lambda m: m.start)
+                        best_start = best.start
+                        best_dist = best.dist
 
-                if good_matches:
-                    best_match = min(good_matches, key=lambda m: m.start)
-                    # Score formula: base 100 per field weight, penalised by match position
-                    # (start * 2) and edit distance (dist * 5).  Title matches get weight 2
-                    # so they rank above body/tag/collection matches at equal distance.
-                    # Matches scoring below 30 are considered too weak and are filtered out.
-                    field_weight = 2.0 if field_name == 'title' else 1.0
-                    score = 100 * field_weight - (best_match.start * 2) - (best_match.dist * 5)
-                    # Ensure score doesn't go below 0
-                    score = max(0, score)
+            if best_start is not None:
+                # Score formula: base 100 per field weight, penalised by match position
+                # (start * 2) and edit distance (dist * 5).  Title matches get weight 2
+                # so they rank above body/tag/collection matches at equal distance.
+                # Matches scoring below 30 are considered too weak and are filtered out.
+                field_weight = 2.0 if field_name == 'title' else 1.0
+                score = max(0, 100 * field_weight - (best_start * 2) - (best_dist * 5))
+                if score >= 30:
                     matches.append((score, p))
                     break  # Stop after finding first match in the specified field
 
