@@ -242,30 +242,32 @@ export default function PromptsPage() {
               searchMode={searchMode}
               onSearchModeChange={handleSearchModeChange}
               sx={{ flexGrow: 1 }}
+              extraControls={
+                <FormControl size="small" sx={{ flexBasis: { xs: '100%', sm: 'auto' }, minWidth: { sm: 200 } }}>
+                  <InputLabel>Filter by Collection</InputLabel>
+                  <Select
+                    value={selectedCollection}
+                    label="Filter by Collection"
+                    onChange={(e) => setSelectedCollection(e.target.value)}
+                    sx={{ backgroundColor: 'background.paper', borderRadius: 1 }}
+                    MenuProps={{
+                      PaperProps: {
+                        sx: {
+                          bgcolor: 'background.paper',
+                          '& .MuiMenuItem-root': { color: 'text.primary' },
+                        },
+                      },
+                    }}
+                  >
+                    <MenuItem value="">All Collections</MenuItem>
+                    <MenuItem value="__none__">Not in any collection</MenuItem>
+                    {collections.map((c) => (
+                      <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              }
             />
-            <FormControl sx={{ minWidth: { xs: '100%', sm: 200 } }}>
-              <InputLabel>Filter by Collection</InputLabel>
-              <Select
-                value={selectedCollection}
-                label="Filter by Collection"
-                onChange={(e) => setSelectedCollection(e.target.value)}
-                sx={{ backgroundColor: 'background.paper', borderRadius: 1 }}
-                MenuProps={{
-                  PaperProps: {
-                    sx: {
-                      bgcolor: 'background.paper',
-                      '& .MuiMenuItem-root': { color: 'text.primary' },
-                    },
-                  },
-                }}
-              >
-                <MenuItem value="">All Collections</MenuItem>
-                <MenuItem value="__none__">Not in any collection</MenuItem>
-                {collections.map((c) => (
-                  <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
           </Box>
           <Typography variant="caption" color="white">
             {searchMode === 'keyword' && 'Keyword mode — exact text matching'}

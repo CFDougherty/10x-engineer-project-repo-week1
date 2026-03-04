@@ -1,4 +1,4 @@
-import { TextField, InputAdornment, Select, MenuItem, FormControl, CircularProgress, Tooltip, IconButton } from '@mui/material';
+import { Box, TextField, InputAdornment, Select, MenuItem, FormControl, CircularProgress, Tooltip, IconButton } from '@mui/material';
 import type { TextFieldProps } from '@mui/material';
 import { Search as SearchIcon, Psychology as PsychologyIcon, Clear as ClearIcon, Abc as AbcIcon, ManageSearch as ManageSearchIcon } from '@mui/icons-material';
 import { useRef, useEffect } from 'react';
@@ -17,6 +17,7 @@ interface SearchBarProps extends Omit<TextFieldProps, 'onChange' | 'value'> {
   loading?: boolean;
   searchMode?: SearchMode;
   onSearchModeChange?: (mode: SearchMode) => void;
+  extraControls?: React.ReactNode;
 }
 
 export default function SearchBar({
@@ -31,6 +32,7 @@ export default function SearchBar({
   loading = false,
   searchMode = 'fuzzy',
   onSearchModeChange,
+  extraControls,
 }: SearchBarProps) {
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     onChange(event.target.value);
@@ -72,7 +74,7 @@ export default function SearchBar({
   });
 
   return (
-    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
       <TextField
         fullWidth
         variant="outlined"
@@ -97,6 +99,8 @@ export default function SearchBar({
           ) : undefined,
         }}
         sx={{
+          flexGrow: 1,
+          flexBasis: { xs: '100%', sm: 'auto' },
           backgroundColor: 'background.paper',
           borderRadius: 1,
           ...(searchMode === 'semantic' && {
@@ -162,6 +166,7 @@ export default function SearchBar({
           </FormControl>
         </Tooltip>
       )}
-    </div>
+      {extraControls}
+    </Box>
   );
 }
