@@ -134,18 +134,12 @@ async def search_prompts(prompts: List[Prompt], query: str, fuzzy: bool = True, 
                 best_start = field.index(query_lower)
                 best_dist = 0
             else:
-                max_dist = 0 if query_len == 1 else max(1, query_len // 2)
+                max_dist = 0 if query_len == 1 else min(2, query_len // 2)
                 near_matches = find_near_matches(query_lower, field, max_l_dist=max_dist)
                 if near_matches:
-                    if query_len == 1:
-                        good_matches = [m for m in near_matches if m.dist == 0]
-                    else:
-                        max_allowed_dist = min(2, query_len // 2)
-                        good_matches = [m for m in near_matches if m.dist <= max_allowed_dist]
-                    if good_matches:
-                        best = min(good_matches, key=lambda m: m.start)
-                        best_start = best.start
-                        best_dist = best.dist
+                    best = min(near_matches, key=lambda m: m.start)
+                    best_start = best.start
+                    best_dist = best.dist
 
             if best_start is not None:
                 # Score formula: base 100 per field weight, penalised by match position
