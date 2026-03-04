@@ -50,6 +50,27 @@ def generate_query_embedding(query: str) -> List[float]:
     return model.encode(query, normalize_embeddings=True).tolist()
 
 
+def generate_embeddings_batch(
+    items: List[tuple],
+    batch_size: int = 64,
+) -> List[List[float]]:
+    """Batch-encode a list of (title, content, description_or_None) tuples.
+
+    Much faster than calling generate_embedding N times: a single model.encode()
+    call processes all texts in optimally-sized batches, fully utilizing the CPU
+    without thread-pool contention.
+    """
+    model = _get_model()
+    texts = []
+    for title, content, description in items:
+        parts = [title, title]
+        if description:
+            parts.append(description)
+        parts.append(content)
+        texts.append("\n".join(parts))
+    return model.encode(texts, normalize_embeddings=True, batch_size=batch_size).tolist()
+
+
 async def agenerate_embedding(title: str, content: str, description: Optional[str] = None) -> List[float]:
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, generate_embedding, title, content, description)

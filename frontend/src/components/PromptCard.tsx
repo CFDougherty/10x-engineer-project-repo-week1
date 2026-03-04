@@ -56,7 +56,7 @@ export default function PromptCard({ prompt, collectionName, onEdit, onDelete, o
       <Card sx={{ cursor: 'pointer', transition: 'box-shadow 0.3s', width: '100%', overflow: 'hidden' }}>
         <CardContent onClick={() => setOpen(true)}>
           <Box display="flex" justifyContent="space-between" alignItems="start">
-            <Typography variant="h5" component="div" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <Typography variant="h6" component="div" sx={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
               {prompt.title}
             </Typography>
             <Box display="flex" gap={1}>
@@ -72,7 +72,7 @@ export default function PromptCard({ prompt, collectionName, onEdit, onDelete, o
             </Box>
           </Box>
 
-          <Typography sx={{ mb: 1.5 }} color="text.secondary">
+          <Typography variant="caption" sx={{ mb: 1 }} color="text.secondary" display="block">
             Created: {formatDateTime(prompt.created_at)}
           </Typography>
 

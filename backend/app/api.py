@@ -709,8 +709,6 @@ async def _do_populate(request: PopulateTestDataRequest) -> None:
             "Tactics for", "Approach to", "Methodology for",
             "How to", "The Art of", "Mastering", "Essentials of"
         ]
-        generic_tags = ["AI", "Template", "Best Practices", "Guide", "Framework"]
-
         for _ in range(request.num_prompts):
             topic = random.choice(_PROMPT_TOPICS)
             title = f"{random.choice(modifiers)} {topic}"
@@ -744,11 +742,13 @@ async def _do_populate(request: PopulateTestDataRequest) -> None:
                 if any(any(word in title_lower for word in tag.lower().split()) for tag in cat)
             ] or random.sample(_TAG_CATEGORIES, min(3, len(_TAG_CATEGORIES)))
 
-            tags = [random.choice(cat) for cat in relevant_categories[:request.tags_per_prompt] if cat]
-            while len(tags) < request.tags_per_prompt:
-                t = random.choice(generic_tags)
-                if t not in tags:
-                    tags.append(t)
+            tags_set: set[str] = {random.choice(cat) for cat in relevant_categories if cat}
+            if len(tags_set) < request.tags_per_prompt:
+                # Draw from the full flat tag pool to avoid exhausting the small generic list
+                pool = [t for cat in _TAG_CATEGORIES for t in cat if t not in tags_set]
+                random.shuffle(pool)
+                tags_set.update(pool[:request.tags_per_prompt - len(tags_set)])
+            tags = list(tags_set)[:request.tags_per_prompt]
             if request.tag_as_test_fill:
                 tags.append("test fill")
 

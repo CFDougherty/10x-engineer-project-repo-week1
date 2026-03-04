@@ -9,7 +9,6 @@ import asyncio
 import base64
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Callable, List, Optional, Tuple
 
@@ -607,8 +606,8 @@ class Storage:
 
         generate_fn: sync callable (title, content, description) -> List[float].
         Returns count of prompts updated. Idempotent — skips already-embedded prompts.
-        Runs up to os.cpu_count() embeddings concurrently to utilise multiple cores
-        (torch/numpy release the GIL during encode, so threads run truly in parallel).
+        All texts are encoded in a single batched model.encode() call (via
+        generate_embeddings_batch) which is far faster than N per-item thread dispatches.
         """
         async with AsyncSessionLocal() as session:
             result = await session.execute(
@@ -619,25 +618,24 @@ class Storage:
         if not rows:
             return 0
 
-        concurrency = max(1, os.cpu_count() or 4)
-        sem = asyncio.Semaphore(concurrency)
         loop = asyncio.get_event_loop()
+        items = [(r.title, r.content, r.description) for r in rows]
 
-        async def embed_one(row: PromptDB):
-            async with sem:
-                return row.id, await loop.run_in_executor(
-                    None, generate_fn, row.title, row.content, row.description
-                )
+        try:
+            from app.embeddings import generate_embeddings_batch
+            all_vecs: list = await loop.run_in_executor(None, generate_embeddings_batch, items)
+            good = list(zip([r.id for r in rows], all_vecs))
+        except Exception as exc:
+            # Fall back to per-item if batch function unavailable
+            logging.getLogger(__name__).warning("Batch embed failed (%s); falling back to per-item", exc)
+            good = []
+            for row, item in zip(rows, items):
+                try:
+                    vec = await loop.run_in_executor(None, generate_fn, *item)
+                    good.append((row.id, vec))
+                except Exception as e:
+                    logging.getLogger(__name__).warning("Backfill failed for %s: %s", row.id, e)
 
-        results = await asyncio.gather(
-            *[embed_one(r) for r in rows], return_exceptions=True
-        )
-        good = []
-        for r in results:
-            if isinstance(r, Exception):
-                logging.getLogger(__name__).warning("Backfill failed: %s", r)
-            else:
-                good.append(r)
         await self.batch_set_embeddings(good)
         return len(good)
 

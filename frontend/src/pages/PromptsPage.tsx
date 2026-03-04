@@ -62,13 +62,13 @@ export default function PromptsPage() {
 
   // ── Column count (responsive, measured via ResizeObserver) ────────────────
   const containerRef = useRef<HTMLDivElement>(null);
-  const [cols, setCols] = useState(3);
+  const [cols, setCols] = useState(1);
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const obs = new ResizeObserver(([entry]) => {
       const w = entry.contentRect.width;
-      setCols(w > 900 ? 3 : w > 600 ? 2 : 1);
+      setCols(w > 960 ? 3 : w > 640 ? 2 : 1);
     });
     obs.observe(el);
     return () => obs.disconnect();
@@ -385,7 +385,7 @@ export default function PromptsPage() {
                   <Box
                     display="grid"
                     gridTemplateColumns={`repeat(${cols}, 1fr)`}
-                    gap={3}
+                    gap={{ xs: 2, sm: 3 }}
                   >
                     {rows[virtualRow.index].map((prompt) => (
                       <PromptCard
