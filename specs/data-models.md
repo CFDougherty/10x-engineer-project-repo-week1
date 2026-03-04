@@ -199,14 +199,16 @@ This model is **not** a subclass of `PromptBase`. All fields are redeclared as `
 
 | Model | Fields | Used by |
 |-------|--------|---------|
-| `PromptList` | `prompts: List[Prompt]`, `total: int` | `GET /prompts` |
+| `PromptList` | `prompts: List[Prompt]`, `total: int`, `next_cursor: Optional[str]` | `GET /prompts` |
 | `CollectionList` | `collections: List[Collection]`, `total: int` | `GET /collections` |
 | `HealthResponse` | `status: str`, `version: str` | `GET /health` |
+
+`next_cursor` is a base64-encoded keyset pagination token. `null` when on the last page. Pass it as `cursor=<value>` in the next request.
 
 ---
 
 ## Security
 
-- **HTML sanitization** — `Prompt.__init__` and `__setattr__` call `sanitize_html()` on `title`, `content`, and `description` to prevent XSS
+- **HTML sanitization** — `Prompt.__init__` calls `sanitize_html()` on `title`, `content`, and `description`. Note: `sanitize_html()` is currently a **no-op** — `html.escape()` was removed to prevent double-encoding artifacts (e.g. `&amp;` appearing literally in the UI). XSS protection is handled by React's automatic output escaping at render time.
 - **SQL injection prevention** — `validate_no_sql_injection` blocks common patterns in string fields
 - **ID validation** — `Prompt.id` is validated as a well-formed UUID4

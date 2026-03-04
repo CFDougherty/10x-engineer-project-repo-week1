@@ -47,7 +47,7 @@ GET /prompts?search={query}&filter=tags&fuzzy={true|false}
 |-----------|------|---------|-------------|
 | `search` | `str` | — | Term to match against tags |
 | `filter` | `str` | — | Set to `tags` to restrict matching to the tags field |
-| `fuzzy` | `bool` | `true` | Enable fuzzy matching (fuzzysearch) vs exact substring |
+| `fuzzy` | `bool` | `true` | `true` = pg_trgm trigram similarity match; `false` = exact case-insensitive substring match |
 | `collection_id` | `str` | — | Optional: pre-filter by collection before searching |
 | `limit` | `int` | — | Pagination: max results to return |
 | `offset` | `int` | `0` | Pagination: number of results to skip |
@@ -62,32 +62,15 @@ flowchart TD
     B -- Yes --> C[Return all prompts unchanged]
     B -- No --> D{fuzzy=true?}
 
-    D -- Yes --> E{"prompt.tags<br/>non-empty?"}
-    E -- No --> H[Exclude prompt]
-    E -- Yes --> F["Join all tags into one string<br/>' '.join(prompt.tags).lower()"]
-    F --> G["fuzzysearch.find_near_matches()<br/>max_dist = 0 if single-char<br/>else max(1, len(query)//2)"]
-    G --> G2{Any near<br/>matches found?}
-    G2 -- No --> H
-    G2 -- Yes --> G3["Filter: keep matches where<br/>dist ≤ min(2, len(query)//2)<br/>(single-char: dist = 0 only)"]
-    G3 --> G4{Any good<br/>matches remain?}
-    G4 -- No --> H
-    G4 -- Yes --> I["Score = max(0,<br/>100×weight − start×2 − dist×5)<br/>(field weight = 1.0 for tags)"]
-    I --> J[Add prompt+score to results]
+    D -- Yes --> E["PostgreSQL pg_trgm trigram similarity<br/>WHERE similarity(tags_text, query) > 0.1"]
+    E --> F[Return matching prompts ordered by relevance]
 
-    D -- No --> K[Iterate over each tag in prompt.tags]
-    K --> L{query.lower() in<br/>tag.lower()?}
-    L -- Yes --> M[Include prompt, stop checking tags]
-    L -- No --> N{More tags?}
-    N -- Yes --> K
-    N -- No --> O[Exclude prompt]
+    D -- No --> G["PostgreSQL ILIKE<br/>WHERE tags_array::text ILIKE '%query%'"]
+    G --> H[Return matching prompts in created_at order]
 
-    J --> P["Filter results: score ≥ 30<br/>Sort by score descending"]
-    M --> Q[Return prompts in original order]
-    P --> R[Return PromptList]
-    Q --> R
-    H --> R
-    O --> R
-    C --> R
+    F --> I[Return PromptList]
+    H --> I
+    C --> I
 ```
 
 ---
@@ -158,11 +141,16 @@ GET /prompts?search=engineering&filter=tags&collection_id=c9d8e7f6
 
 ## Fuzzy Matching Details
 
-When `fuzzy=true` (the default), matching uses the `fuzzysearch` library:
+Tag search is executed at the **database level** via `storage.get_prompts_page()`. The `utils.py:search_prompts` utility (which uses the `fuzzysearch` Python library) is not used for the main API route.
 
-- All tags for a prompt are **joined into a single string** before matching — this means a multi-word query can match across tag boundaries
-- `fuzzysearch.find_near_matches` is called with `max_l_dist = max(1, len(query) // 2)` (single-char: `0`)
-- Results are then filtered to `dist ≤ min(2, len(query) // 2)`, so the effective ceiling is **2** for queries of 5+ characters
-- Single-character queries require an exact match (distance 0) at both stages
-- Scores below `30` are discarded to suppress low-quality results
-- Results are sorted by score descending so the most relevant prompts appear first
+When `fuzzy=true` (the default), the database uses PostgreSQL `pg_trgm` trigram similarity:
+
+- The `tags` array column is cast to text and compared using trigram similarity
+- Similarity threshold: `> 0.1` (permissive, to surface partial matches)
+- Results are ordered by similarity score descending — most relevant first
+- Requires the `pg_trgm` PostgreSQL extension (enabled by default in the Docker setup)
+
+When `fuzzy=false`, the database uses a case-insensitive `ILIKE` substring match:
+
+- Equivalent to `WHERE tags::text ILIKE '%query%'`
+- Results are returned in `created_at` descending order (no relevance scoring)

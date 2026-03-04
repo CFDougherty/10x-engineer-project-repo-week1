@@ -6,7 +6,7 @@ Base URL (local): `http://localhost:8000`
 - OpenAPI JSON: `GET /openapi.json`
 - Content type: JSON (`Content-Type: application/json`)
 - Auth: none
-- Storage: in-memory (restarting the server clears data)
+- Storage: PostgreSQL (data persists across restarts)
 
 ---
 
@@ -52,24 +52,21 @@ Used for domain errors like “not found” or “invalid collection”.
 ### 2) Validation errors (FastAPI / Pydantic)
 Used when request bodies or parameters fail schema validation.
 
-- Status code: `422 Unprocessable Entity`
+- Status code: `400 Bad Request`
 - Typical causes:
   - missing required fields (`title`, `content`, `name`)
   - field length constraints (e.g., `title` max 200)
 
-**Format (example)**
+**Format**
 
 ```json
-{
-  "detail": [
-    {
-      "type": "missing",
-      "loc": ["body", "title"],
-      "msg": "Field required",
-      "input": { "content": "..." }
-    }
-  ]
-}
+{ "detail": "Validation error: <message>" }
+```
+
+**Example** (missing required `title`)
+
+```json
+{ "detail": "Validation error: Field required" }
 ```
 
 ---
@@ -86,6 +83,7 @@ Used when request bodies or parameters fail schema validation.
 | `content` | string | yes | min 1 char |
 | `description` | string \| null | no | max 500 chars |
 | `collection_id` | string \| null | no | must reference an existing collection if provided |
+| `tags` | string[] \| null | no | each tag must be a non-empty string |
 
 #### PromptUpdate (request body for PUT)
 Same shape as `PromptCreate`.
@@ -102,6 +100,8 @@ All fields optional. Empty or whitespace-only strings are normalized to `null`.
   "content": "Summarize: {{input}}",
   "description": "General-purpose summarization prompt",
   "collection_id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
+  "tags": ["summarize", "general"],
+  "version": 1,
   "created_at": "2026-02-18T18:24:20.454842",
   "updated_at": "2026-02-18T18:24:20.454844"
 }
@@ -127,6 +127,7 @@ All fields optional. Empty or whitespace-only strings are normalized to `null`.
   "id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
   "name": "Onboarding",
   "description": "Prompts used during onboarding",
+  "prompt_ids": ["d010f7fa-10a5-4d1f-9b16-2dc2c75eafd3"],
   "created_at": "2026-02-18T19:51:56.546992"
 }
 ```
@@ -188,9 +189,12 @@ All fields optional. Empty or whitespace-only strings are normalized to `null`.
 ```json
 {
   "prompts": [/* Prompt[] */],
-  "total": 0
+  "total": 0,
+  "next_cursor": null
 }
 ```
+
+`next_cursor` is a base64-encoded keyset pagination token. Pass it as `cursor=<value>` in the next request to retrieve the following page. `null` when on the last page.
 
 #### CollectionList (response)
 
@@ -346,11 +350,16 @@ List prompts.
 
 **Query parameters**
 
-| Name | Type | Required | Description |
-|---|---|---:|---|
-| `collection_id` | string | no | Filter prompts by exact `collection_id` |
-| `search` | string | no | Case-insensitive substring match against prompt fields |
-| `filter` | string | no | Filter search to specific field. One of: `'title'`, `'description'`, `'tags'`, `'collection'`, or `'all'`. Default: `'all'` (search all fields) |
+| Name | Type | Required | Default | Description |
+|---|---|---:|---|---|
+| `collection_id` | string | no | — | Filter prompts by exact `collection_id` |
+| `search` | string | no | — | Search query matched against prompt fields |
+| `filter` | string | no | `'all'` | Restrict search to a specific field. One of: `'title'`, `'description'`, `'content'`, `'tags'`, `'collection'`, or `'all'` |
+| `fuzzy` | bool | no | `true` | `true` = pg_trgm trigram similarity; `false` = exact case-insensitive substring match |
+| `semantic` | bool | no | `false` | `true` = pgvector cosine-distance search using embeddings (ignores `search`/`filter`/`fuzzy` when active) |
+| `limit` | int | no | — | Maximum number of results to return per page |
+| `cursor` | string | no | — | Keyset pagination cursor from `next_cursor` in a previous response |
+| `offset` | int | no | `0` | Offset-based pagination — number of results to skip (alternative to `cursor`) |
 
 **curl**
 
@@ -361,11 +370,18 @@ curl -sS "http://localhost:8000/prompts"
 # Filter by collection
 curl -sS "http://localhost:8000/prompts?collection_id=<collection_id>"
 
-# Search
+# Search with fuzzy matching (default)
 curl -sS "http://localhost:8000/prompts?search=summarize"
 
-# Combine filter + search
-curl -sS "http://localhost:8000/prompts?collection_id=<collection_id>&search=summarize"
+# Search with exact substring match
+curl -sS "http://localhost:8000/prompts?search=summarize&fuzzy=false"
+
+# Semantic search
+curl -sS "http://localhost:8000/prompts?search=summarize&semantic=true"
+
+# Paginate
+curl -sS "http://localhost:8000/prompts?limit=10"
+curl -sS "http://localhost:8000/prompts?limit=10&cursor=<next_cursor>"
 ```
 
 **fetch**
@@ -388,13 +404,18 @@ console.log(data);
       "content": "Summarize: {{input}}",
       "description": "General-purpose summarization prompt",
       "collection_id": null,
+      "tags": ["summarize", "general"],
+      "version": 1,
       "created_at": "2026-02-18T18:24:20.454842",
       "updated_at": "2026-02-18T18:24:20.454844"
     }
   ],
-  "total": 1
+  "total": 1,
+  "next_cursor": null
 }
 ```
+
+Note: `content` is truncated to 300 characters in list responses. Use `GET /prompts/{prompt_id}` to retrieve the full content.
 
 **Errors**
 
@@ -435,6 +456,8 @@ console.log(await res.json());
   "content": "Summarize: {{input}}",
   "description": "General-purpose summarization prompt",
   "collection_id": null,
+  "tags": ["summarize", "general"],
+  "version": 1,
   "created_at": "2026-02-18T18:24:20.454842",
   "updated_at": "2026-02-18T18:24:20.454844"
 }
@@ -495,6 +518,8 @@ console.log(await res.json());
   "content": "Summarize the following: {{input}}",
   "description": "General-purpose summarization prompt",
   "collection_id": null,
+  "tags": null,
+  "version": 1,
   "created_at": "2026-02-18T18:24:20.454842",
   "updated_at": "2026-02-18T18:24:20.454844"
 }
@@ -508,19 +533,10 @@ console.log(await res.json());
 { "detail": "Collection not found" }
 ```
 
-- `422 Unprocessable Entity` (invalid body; example: missing `title`)
+- `400 Bad Request` (invalid body; example: missing `title`)
 
 ```json
-{
-  "detail": [
-    {
-      "type": "missing",
-      "loc": ["body", "title"],
-      "msg": "Field required",
-      "input": { "content": "Summarize: {{input}}" }
-    }
-  ]
-}
+{ "detail": "Validation error: Field required" }
 ```
 
 ---
@@ -581,6 +597,8 @@ console.log(await res.json());
   "content": "Summarize: {{input}}\n\nKeep it under 5 bullets.",
   "description": "Updated constraints",
   "collection_id": null,
+  "tags": null,
+  "version": 2,
   "created_at": "2026-02-18T18:24:20.454842",
   "updated_at": "2026-02-18T18:30:01.123456"
 }
@@ -600,19 +618,10 @@ console.log(await res.json());
 { "detail": "Collection not found" }
 ```
 
-- `422 Unprocessable Entity` (invalid body; example: missing `content`)
+- `400 Bad Request` (invalid body; example: missing `content`)
 
 ```json
-{
-  "detail": [
-    {
-      "type": "missing",
-      "loc": ["body", "content"],
-      "msg": "Field required",
-      "input": { "title": "Summarize content (v2)" }
-    }
-  ]
-}
+{ "detail": "Validation error: Field required" }
 ```
 
 ---
@@ -671,6 +680,8 @@ console.log(await res.json());
   "content": "Summarize: {{input}}",
   "description": null,
   "collection_id": null,
+  "tags": ["summarize", "general"],
+  "version": 2,
   "created_at": "2026-02-18T18:24:20.454842",
   "updated_at": "2026-02-18T18:35:10.000000"
 }
@@ -690,19 +701,10 @@ console.log(await res.json());
 { "detail": "Collection not found" }
 ```
 
-- `422 Unprocessable Entity` (invalid body; example: wrong type)
+- `400 Bad Request` (invalid body; example: wrong type)
 
 ```json
-{
-  "detail": [
-    {
-      "type": "string_type",
-      "loc": ["body", "title"],
-      "msg": "Input should be a valid string",
-      "input": 123
-    }
-  ]
-}
+{ "detail": "Validation error: Input should be a valid string" }
 ```
 
 ---
@@ -776,6 +778,7 @@ console.log(data);
       "id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
       "name": "Onboarding",
       "description": "Prompts used during onboarding",
+      "prompt_ids": ["d010f7fa-10a5-4d1f-9b16-2dc2c75eafd3"],
       "created_at": "2026-02-18T19:51:56.546992"
     }
   ],
@@ -820,6 +823,7 @@ console.log(await res.json());
   "id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
   "name": "Onboarding",
   "description": "Prompts used during onboarding",
+  "prompt_ids": ["d010f7fa-10a5-4d1f-9b16-2dc2c75eafd3"],
   "created_at": "2026-02-18T19:51:56.546992"
 }
 ```
@@ -873,25 +877,17 @@ console.log(await res.json());
   "id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
   "name": "Onboarding",
   "description": "Prompts used during onboarding",
+  "prompt_ids": [],
   "created_at": "2026-02-18T19:51:56.546992"
 }
 ```
 
 **Errors**
 
-- `422 Unprocessable Entity` (invalid body; example: missing `name`)
+- `400 Bad Request` (invalid body; example: missing `name`)
 
 ```json
-{
-  "detail": [
-    {
-      "type": "missing",
-      "loc": ["body", "name"],
-      "msg": "Field required",
-      "input": { "description": "Prompts used during onboarding" }
-    }
-  ]
-}
+{ "detail": "Validation error: Field required" }
 ```
 
 ---
@@ -943,6 +939,7 @@ console.log(await res.json());
   "id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
   "name": "Onboarding Updated",
   "description": "Updated description for onboarding prompts",
+  "prompt_ids": ["d010f7fa-10a5-4d1f-9b16-2dc2c75eafd3"],
   "created_at": "2026-02-18T19:51:56.546992"
 }
 ```
@@ -1007,6 +1004,7 @@ console.log(await res.json());
   "id": "50ab7cc9-eed7-414d-8f23-1b19e20683f8",
   "name": "Onboarding",
   "description": "Updated description",
+  "prompt_ids": ["d010f7fa-10a5-4d1f-9b16-2dc2c75eafd3"],
   "created_at": "2026-02-18T19:51:56.546992"
 }
 ```
@@ -1068,17 +1066,31 @@ No response body.
 ### Admin
 
 #### POST `/admin/populate-test-data`
-Populate the database with realistic test data.
+Start test-data generation as a background task. Returns immediately with `202 Accepted`. Poll `GET /admin/populate-status` to track progress.
 
-**Request**
+**Request body** (all fields optional)
 
-- No parameters
-- No body
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `num_prompts` | int | `40` | Number of prompts to generate |
+| `num_collections` | int | `4` | Number of collections to create |
+| `collection_chance` | float | `0.6` | Probability each prompt is assigned to a collection |
+| `tags_per_prompt` | int | `3` | Number of tags assigned to each prompt |
+| `random_seed` | int \| null | `null` | Seed for reproducible generation |
+| `tag_as_test_fill` | bool | `false` | If true, adds `"test fill"` to every prompt's tags |
+| `append_mode` | bool | `false` | If false (default), clears all data before generating. If true, adds to existing data. |
+| `data_source` | string | `"dataset"` | `"dataset"` = sample from curated prompt pool; `"template"` = auto-generated from topics |
 
 **curl**
 
 ```bash
+# Default settings
 curl -sS -X POST "http://localhost:8000/admin/populate-test-data"
+
+# Custom settings
+curl -sS -X POST "http://localhost:8000/admin/populate-test-data" \
+  -H "Content-Type: application/json" \
+  -d '{ "num_prompts": 100, "num_collections": 10, "append_mode": true }'
 ```
 
 **fetch**
@@ -1086,28 +1098,25 @@ curl -sS -X POST "http://localhost:8000/admin/populate-test-data"
 ```javascript
 const res = await fetch('http://localhost:8000/admin/populate-test-data', {
   method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ num_prompts: 100, num_collections: 10 }),
 });
 const data = await res.json();
 console.log(data);
 ```
 
-**Success response — 200**
+**Success response — 202**
 
 ```json
-{
-  "status": "success",
-  "message": "Test data populated successfully",
-  "prompts_created": 40,
-  "collections_created": 4
-}
+{ "status": "started", "total": 40 }
 ```
 
 **Errors**
 
-- `500 Internal Server Error` (if data population fails)
+- `409 Conflict` (a populate operation is already running)
 
 ```json
-{ "detail": "Failed to populate test data" }
+{ "detail": "A populate operation is already in progress." }
 ```
 
 ---
@@ -1152,8 +1161,148 @@ console.log(data);
 - `500 Internal Server Error` (if data clearing fails)
 
 ```json
-{ "detail": "Failed to clear data" }
+{ "detail": "Failed to clear data: <message>" }
 ```
+
+---
+
+#### DELETE `/admin/clear-test-data`
+Delete only prompts tagged with `"test fill"` (created by `populate-test-data` with `tag_as_test_fill: true`). Leaves all other data untouched.
+
+**curl**
+
+```bash
+curl -sS -X DELETE "http://localhost:8000/admin/clear-test-data"
+```
+
+**fetch**
+
+```javascript
+const res = await fetch('http://localhost:8000/admin/clear-test-data', { method: 'DELETE' });
+const data = await res.json();
+console.log(data);
+```
+
+**Success response — 200**
+
+```json
+{
+  "status": "success",
+  "message": "Removed 40 prompt(s) tagged 'test fill'",
+  "prompts_removed": 40
+}
+```
+
+---
+
+#### GET `/admin/populate-status`
+Poll the progress of a running `populate-test-data` background task.
+
+**curl**
+
+```bash
+curl -sS "http://localhost:8000/admin/populate-status"
+```
+
+**fetch**
+
+```javascript
+const res = await fetch('http://localhost:8000/admin/populate-status');
+const data = await res.json();
+console.log(data);
+```
+
+**Success response — 200**
+
+```json
+{
+  "current": 25,
+  "total": 40,
+  "active": true,
+  "phase": "inserting",
+  "error": null,
+  "prompts_created": 25,
+  "collections_created": 0,
+  "skipped": 0
+}
+```
+
+`phase` progresses through: `"generating"` → `"inserting"` → `"versioning"` → `"collections"` → `"assigning"` → `"done"`.
+
+When `active` is `false` and `error` is `null`, the operation completed successfully. When `active` is `false` and `error` is non-null, the operation failed.
+
+---
+
+#### GET `/admin/embedding-status`
+Return the number of prompts with and without vector embeddings.
+
+**curl**
+
+```bash
+curl -sS "http://localhost:8000/admin/embedding-status"
+```
+
+**Success response — 200**
+
+```json
+{ "total": 40, "embedded": 38, "complete": false }
+```
+
+`complete` is `true` when all prompts have embeddings (or when there are no prompts).
+
+---
+
+#### POST `/admin/backfill-embeddings`
+Generate vector embeddings for all prompts that are missing them. Safe to call multiple times — already-embedded prompts are skipped.
+
+**curl**
+
+```bash
+curl -sS -X POST "http://localhost:8000/admin/backfill-embeddings"
+```
+
+**Success response — 200**
+
+```json
+{ "status": "success", "updated": 2, "message": "Embeddings generated for 2 prompt(s)." }
+```
+
+**Errors**
+
+- `503 Service Unavailable` (embedding model not available)
+
+```json
+{ "detail": "Model unavailable: <message>" }
+```
+
+---
+
+#### GET `/admin/events`
+Server-Sent Events (SSE) stream for real-time data change notifications. Connect once and receive push events whenever data is populated or cleared.
+
+**curl**
+
+```bash
+curl -sS -N "http://localhost:8000/admin/events"
+```
+
+**fetch**
+
+```javascript
+const source = new EventSource('http://localhost:8000/admin/events');
+source.onmessage = (e) => console.log(JSON.parse(e.data));
+```
+
+**Event types**
+
+| Event | When | Example data |
+|---|---|---|
+| `connected` | On initial connection | `{ "event": "connected" }` |
+| `data_changed` | After populate or clear | `{ "event": "data_changed", "message": "Test data populated", "action": "populate" }` |
+
+Actions: `"populate"`, `"clear"`, `"clear_test"`.
+
+Keep-alive comment lines (`: keepalive`) are sent every 15 seconds to prevent connection timeouts.
 
 ---
 

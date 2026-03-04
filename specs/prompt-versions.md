@@ -140,12 +140,12 @@ stateDiagram-v2
 
 ## Storage Internals
 
-Versioning data is spread across three in-memory dictionaries in `backend/app/storage.py`:
+Versioning data is spread across three PostgreSQL tables managed by SQLAlchemy ORM models in `backend/app/models_db.py` and `backend/app/storage.py`:
 
-| Dict | Type | Contents |
-|------|------|----------|
-| `_prompts` | `Dict[str, Prompt]` | Current state of each prompt, including `version` field |
-| `_prompt_versions` | `Dict[str, List[PromptVersion]]` | All immutable snapshots, keyed by `prompt_id` |
-| `_prompt_meta` | `Dict[str, PromptMeta]` | Current version counter and original `created_at` per prompt |
+| Table | ORM Model | Contents |
+|-------|-----------|----------|
+| `prompts` | `PromptDB` | Current state of each prompt, including the `version` integer column |
+| `prompt_versions` | `PromptVersionDB` | Immutable snapshots; FK to `prompt_id` with CASCADE delete |
+| `prompt_meta` | `PromptMetaDB` | Current version counter and original `created_at` per prompt |
 
-`PromptMeta.current_version` is the authoritative counter. `create_prompt_version()` reads it, increments it, writes the new `PromptVersion`, and updates the meta record in a single call.
+`PromptMetaDB.current_version` is the authoritative counter. `create_prompt_version()` reads it, increments it, writes the new `PromptVersionDB` row, and updates `PromptDB.version` — all within a single async SQLAlchemy session.
