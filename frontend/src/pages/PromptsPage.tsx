@@ -61,17 +61,20 @@ export default function PromptsPage() {
   const showScrollTop = scrollY > 400;
 
   // ── Column count (responsive, measured via ResizeObserver) ────────────────
-  const containerRef = useRef<HTMLDivElement>(null);
+  // Using a callback ref so the observer is set up whenever the grid div mounts,
+  // not just on the first render (which may be an isLoading early-return with no grid).
+  const obsRef = useRef<ResizeObserver | null>(null);
   const [cols, setCols] = useState(1);
-  useEffect(() => {
-    const el = containerRef.current;
+  const containerRef = useCallback((el: HTMLDivElement | null) => {
+    obsRef.current?.disconnect();
+    obsRef.current = null;
     if (!el) return;
     const obs = new ResizeObserver(([entry]) => {
       const w = entry.contentRect.width;
       setCols(w > 960 ? 3 : w > 640 ? 2 : 1);
     });
     obs.observe(el);
-    return () => obs.disconnect();
+    obsRef.current = obs;
   }, []);
 
   // ── Query key — changes trigger a fresh first-page fetch ─────────────────
