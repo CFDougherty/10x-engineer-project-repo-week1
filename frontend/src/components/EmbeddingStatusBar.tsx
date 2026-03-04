@@ -10,6 +10,7 @@ interface EmbeddingStatus {
 }
 
 const POLL_INTERVAL_MS = 4000;
+const IDLE_POLL_MS = 15000;  // slow-poll while complete, to detect new embedding jobs
 
 export default function EmbeddingStatusBar() {
   const [status, setStatus] = useState<EmbeddingStatus | null>(null);
@@ -24,16 +25,21 @@ export default function EmbeddingStatusBar() {
       setStatus(next);
 
       if (next.complete) {
-        // Stop polling once all are embedded
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-        // Fade out the "complete" message after 6 seconds if there are no prompts
-        // that need embedding (i.e. total === 0 is also "complete")
+        // Switch to slow polling while idle — keeps the component alive to detect new jobs
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        intervalRef.current = setInterval(fetchStatus, IDLE_POLL_MS);
         if (next.total > 0) {
           hideTimerRef.current = setTimeout(() => setVisible(false), 6000);
         }
+      } else if (next.total > 0) {
+        // New embedding work detected — re-show bar and restore fast polling
+        setVisible(true);
+        if (hideTimerRef.current) {
+          clearTimeout(hideTimerRef.current);
+          hideTimerRef.current = null;
+        }
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        intervalRef.current = setInterval(fetchStatus, POLL_INTERVAL_MS);
       }
     } catch {
       // Silently ignore — backend may not be ready yet

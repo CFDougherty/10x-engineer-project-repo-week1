@@ -613,6 +613,22 @@ class Storage:
             session.add_all(rows)
             await session.commit()
 
+    async def batch_update_collection_ids(self, assignments: list[tuple[str, str]]) -> None:
+        """Set collection_id for a batch of (prompt_id, collection_id) pairs in one transaction.
+
+        No embedding generation — use backfill_embeddings() after this if needed.
+        """
+        if not assignments:
+            return
+        async with AsyncSessionLocal() as session:
+            for prompt_id, collection_id in assignments:
+                await session.execute(
+                    update(PromptDB)
+                    .where(PromptDB.id == prompt_id)
+                    .values(collection_id=collection_id)
+                )
+            await session.commit()
+
     async def batch_set_embeddings(self, updates: List[Tuple[str, List[float]]]) -> None:
         """Bulk-update embeddings for a list of (prompt_id, embedding) pairs in one transaction."""
         if not updates:
@@ -626,13 +642,13 @@ class Storage:
                 )
             await session.commit()
 
-    async def backfill_embeddings(self, generate_fn: Callable) -> int:
+    async def backfill_embeddings(self, generate_fn: Callable, chunk_size: int = 200) -> int:
         """Generate embeddings for all prompts where embedding IS NULL.
 
         generate_fn: sync callable (title, content, description) -> List[float].
         Returns count of prompts updated. Idempotent — skips already-embedded prompts.
-        All texts are encoded in a single batched model.encode() call (via
-        generate_embeddings_batch) which is far faster than N per-item thread dispatches.
+        Processes in chunks of chunk_size and commits after each chunk so that
+        the /admin/embedding-status endpoint reflects live progress.
         """
         async with AsyncSessionLocal() as session:
             result = await session.execute(
@@ -644,25 +660,31 @@ class Storage:
             return 0
 
         loop = asyncio.get_event_loop()
-        items = [(r.title, r.content, r.description) for r in rows]
+        total_updated = 0
 
-        try:
-            from app.embeddings import generate_embeddings_batch
-            all_vecs: list = await loop.run_in_executor(None, generate_embeddings_batch, items)
-            good = list(zip([r.id for r in rows], all_vecs))
-        except Exception as exc:
-            # Fall back to per-item if batch function unavailable
-            logging.getLogger(__name__).warning("Batch embed failed (%s); falling back to per-item", exc)
-            good = []
-            for row, item in zip(rows, items):
-                try:
-                    vec = await loop.run_in_executor(None, generate_fn, *item)
-                    good.append((row.id, vec))
-                except Exception as e:
-                    logging.getLogger(__name__).warning("Backfill failed for %s: %s", row.id, e)
+        for i in range(0, len(rows), chunk_size):
+            chunk = rows[i : i + chunk_size]
+            items = [(r.title, r.content, r.description) for r in chunk]
 
-        await self.batch_set_embeddings(good)
-        return len(good)
+            try:
+                from app.embeddings import generate_embeddings_batch
+                vecs: list = await loop.run_in_executor(None, generate_embeddings_batch, items)
+                good = list(zip([r.id for r in chunk], vecs))
+            except Exception as exc:
+                # Fall back to per-item if batch function unavailable
+                logging.getLogger(__name__).warning("Batch embed failed (%s); falling back to per-item", exc)
+                good = []
+                for row, item in zip(chunk, items):
+                    try:
+                        vec = await loop.run_in_executor(None, generate_fn, *item)
+                        good.append((row.id, vec))
+                    except Exception as e:
+                        logging.getLogger(__name__).warning("Backfill failed for %s: %s", row.id, e)
+
+            await self.batch_set_embeddings(good)  # commits to DB; status endpoint sees updated count
+            total_updated += len(good)
+
+        return total_updated
 
     # ============== Utility ==============
 

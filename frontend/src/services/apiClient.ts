@@ -86,6 +86,7 @@ export interface PopulateProgress {
   total: number;
   active: boolean;
   error: string | null;
+  phase?: string;
 }
 
 export const populateTestData = (config: PopulateConfig) =>

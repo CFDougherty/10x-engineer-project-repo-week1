@@ -74,6 +74,16 @@ export default function PopulateStatusBar() {
 
   const pct = status.total > 0 ? Math.round((status.current / status.total) * 100) : 0;
 
+  const phaseLabels: Record<string, string> = {
+    generating: 'Generating prompts…',
+    inserting: 'Inserting into database…',
+    versioning: 'Creating versions…',
+    collections: 'Creating collections…',
+    assigning: 'Assigning to collections…',
+    done: 'Finalizing…',
+  };
+  const phaseLabel = (status.phase && phaseLabels[status.phase]) ?? 'Generating prompts…';
+
   if (!status.active && status.error) {
     return (
       <Box
@@ -135,7 +145,7 @@ export default function PopulateStatusBar() {
       >
         <DataObjectIcon sx={{ fontSize: 14, color: 'text.secondary', flexShrink: 0 }} />
         <Typography variant="caption" sx={{ color: 'text.secondary', flexShrink: 0 }}>
-          Generating prompts
+          {phaseLabel}
         </Typography>
         <Box sx={{ flexGrow: 1 }}>
           <LinearProgress

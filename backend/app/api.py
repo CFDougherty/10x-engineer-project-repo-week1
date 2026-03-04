@@ -818,19 +818,28 @@ async def _do_populate(request: PopulateTestDataRequest) -> None:
                     _populate_progress["skipped"] += 1
 
         # ── Phase 2: batch-insert all prompts in one DB round-trip (no embeddings) ──
+        _populate_progress["phase"] = "inserting"
         await storage.batch_create_prompts(created_prompts)
-        _populate_progress["current"] = len(created_prompts)
+        num_created = len(created_prompts)
+        _populate_progress["total"] = num_created
+        _populate_progress["current"] = 0
 
         # ── Phase 3: create versions concurrently (no embeddings) ──
+        _populate_progress["phase"] = "versioning"
         ver_sem = asyncio.Semaphore(20)
+        version_counter = 0
 
         async def _create_version(p: Prompt) -> None:
+            nonlocal version_counter
             async with ver_sem:
                 await storage.create_prompt_version(p.id, p)
+                version_counter += 1
+                _populate_progress["current"] = version_counter
 
         await asyncio.gather(*[_create_version(p) for p in created_prompts])
 
-        # ── Phase 4: create collections + assign prompts in single transactions ──
+        # ── Phase 4: create collections + bulk-assign prompts (no embeddings) ──
+        _populate_progress["phase"] = "collections"
         created_collections = []
         for _ in range(request.num_collections):
             name = rng.choice(_COLLECTION_THEMES)
@@ -846,18 +855,20 @@ async def _do_populate(request: PopulateTestDataRequest) -> None:
             created_collections.append(collection_obj)
 
         if created_collections:
-            assign_sem = asyncio.Semaphore(20)
-
-            async def _assign(prompt: Prompt) -> None:
-                if rng.random() < request.collection_chance:
-                    prompt.collection_id = rng.choice(created_collections).id
-                    async with assign_sem:
-                        await storage.update_prompt(prompt.id, prompt)
-
-            await asyncio.gather(*[_assign(p) for p in created_prompts])
+            _populate_progress["phase"] = "assigning"
+            assignments = [
+                (p.id, rng.choice(created_collections).id)
+                for p in created_prompts
+                if rng.random() < request.collection_chance
+            ]
+            chunk_size = 500
+            for i in range(0, len(assignments), chunk_size):
+                chunk = assignments[i : i + chunk_size]
+                await storage.batch_update_collection_ids(chunk)
 
         _populate_progress["prompts_created"] = len(created_prompts)
         _populate_progress["collections_created"] = len(created_collections)
+        _populate_progress["phase"] = "done"
         _populate_progress["active"] = False
 
         # Notify clients about data change
@@ -897,7 +908,7 @@ async def populate_test_data(
     else:
         random.seed()
 
-    _populate_progress = {"current": 0, "total": request.num_prompts, "active": True, "error": None, "prompts_created": 0, "collections_created": 0, "skipped": 0}
+    _populate_progress = {"current": 0, "total": request.num_prompts, "active": True, "error": None, "prompts_created": 0, "collections_created": 0, "skipped": 0, "phase": "generating"}
 
     background_tasks.add_task(_do_populate, request)
 
