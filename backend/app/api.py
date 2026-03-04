@@ -201,7 +201,9 @@ async def list_prompts(
             collection_id=collection_id,
         )
         total = await storage.count_semantic_results(collection_id=collection_id)
-        return PromptList(prompts=results, total=total, next_cursor=None)
+        next_offset = _offset + len(results)
+        next_cursor_val = str(next_offset) if next_offset < total else None
+        return PromptList(prompts=results, total=total, next_cursor=next_cursor_val)
 
     # ── Lexical / browse path ─────────────────────────────────────────────────
     search_field = filter if filter is not None else "all"

@@ -96,10 +96,11 @@ export default function PromptsPage() {
     queryKey,
     queryFn: ({ pageParam }) => {
       if (semantic && submittedSearch.trim()) {
-        // Semantic path: single page, no cursor needed
         return getPrompts({
           search: submittedSearch,
           semantic: true,
+          limit: PAGE_SIZE,
+          offset: pageParam ? parseInt(pageParam as string, 10) : 0,
           ...(selectedCollection && selectedCollection !== '__none__'
             ? { collection_id: selectedCollection }
             : {}),
