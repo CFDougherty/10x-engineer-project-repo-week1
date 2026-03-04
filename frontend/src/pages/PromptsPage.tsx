@@ -40,7 +40,7 @@ export default function PromptsPage() {
   const [submittedSearch, setSubmittedSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [selectedCollection, setSelectedCollection] = useState('');
-  const [semantic, setSemantic] = useState(false);
+  const [searchMode, setSearchMode] = useState<'keyword' | 'fuzzy' | 'semantic'>('fuzzy');
 
   // ── Dialog state ─────────────────────────────────────────────────────────
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -80,7 +80,7 @@ export default function PromptsPage() {
   // ── Query key — changes trigger a fresh first-page fetch ─────────────────
   const queryKey = [
     ...PROMPTS_QUERY_KEY,
-    { search: submittedSearch, filter, collectionId: selectedCollection, semantic },
+    { search: submittedSearch, filter, collectionId: selectedCollection, searchMode },
   ];
 
   // ── Infinite query ────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ export default function PromptsPage() {
   } = useInfiniteQuery({
     queryKey,
     queryFn: ({ pageParam }) => {
-      if (semantic && submittedSearch.trim()) {
+      if (searchMode === 'semantic' && submittedSearch.trim()) {
         return getPrompts({
           search: submittedSearch,
           semantic: true,
@@ -116,7 +116,7 @@ export default function PromptsPage() {
           selectedCollection && selectedCollection !== '__none__'
             ? selectedCollection
             : undefined,
-        fuzzy: true,
+        fuzzy: searchMode === 'fuzzy',
       }).then((r) => r.data);
     },
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
@@ -141,8 +141,8 @@ export default function PromptsPage() {
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleSearch = () => setSubmittedSearch(searchInput);
 
-  const handleSemanticToggle = (next: boolean) => {
-    setSemantic(next);
+  const handleSearchModeChange = (mode: 'keyword' | 'fuzzy' | 'semantic') => {
+    setSearchMode(mode);
     setSubmittedSearch(searchInput);
   };
 
@@ -239,8 +239,8 @@ export default function PromptsPage() {
               onSearchFieldChange={setFilter}
               placeholder="Search prompts..."
               loading={isFetching && !isFetchingNextPage}
-              semantic={semantic}
-              onSemanticChange={handleSemanticToggle}
+              searchMode={searchMode}
+              onSearchModeChange={handleSearchModeChange}
               sx={{ flexGrow: 1 }}
             />
             <FormControl sx={{ minWidth: { xs: '100%', sm: 200 } }}>
@@ -267,11 +267,11 @@ export default function PromptsPage() {
               </Select>
             </FormControl>
           </Box>
-          {semantic && (
-            <Typography variant="caption" color="white">
-              Semantic mode — press Enter or click search to query by meaning
-            </Typography>
-          )}
+          <Typography variant="caption" color="white">
+            {searchMode === 'keyword' && 'Keyword mode — exact text matching'}
+            {searchMode === 'fuzzy' && 'Fuzzy mode — approximate text matching'}
+            {searchMode === 'semantic' && 'Semantic mode — press Enter or click search to query by meaning'}
+          </Typography>
         </Box>
         <Button
           variant="contained"
@@ -309,7 +309,7 @@ export default function PromptsPage() {
       {/* Empty state */}
       {displayedPrompts.length === 0 && !isFetching && (
         <Alert severity="info">
-          {semantic && submittedSearch.trim()
+          {searchMode === 'semantic' && submittedSearch.trim()
             ? 'No semantically similar prompts found. Try a different query or run backfill if embeddings are not yet generated.'
             : 'No prompts found. Create your first prompt!'}
         </Alert>

@@ -1,7 +1,9 @@
 import { TextField, InputAdornment, Select, MenuItem, FormControl, CircularProgress, Tooltip, IconButton } from '@mui/material';
 import type { TextFieldProps } from '@mui/material';
-import { Search as SearchIcon, Psychology as PsychologyIcon, Clear as ClearIcon } from '@mui/icons-material';
+import { Search as SearchIcon, Psychology as PsychologyIcon, Clear as ClearIcon, Abc as AbcIcon, ManageSearch as ManageSearchIcon } from '@mui/icons-material';
 import { useRef, useEffect } from 'react';
+
+type SearchMode = 'keyword' | 'fuzzy' | 'semantic';
 
 interface SearchBarProps extends Omit<TextFieldProps, 'onChange' | 'value'> {
   value: string;
@@ -13,8 +15,8 @@ interface SearchBarProps extends Omit<TextFieldProps, 'onChange' | 'value'> {
   onSearch?: () => void;
   onClear?: () => void;
   loading?: boolean;
-  semantic?: boolean;
-  onSemanticChange?: (semantic: boolean) => void;
+  searchMode?: SearchMode;
+  onSearchModeChange?: (mode: SearchMode) => void;
 }
 
 export default function SearchBar({
@@ -27,8 +29,8 @@ export default function SearchBar({
   onSearch,
   onClear,
   loading = false,
-  semantic = false,
-  onSemanticChange,
+  searchMode = 'fuzzy',
+  onSearchModeChange,
 }: SearchBarProps) {
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     onChange(event.target.value);
@@ -55,6 +57,20 @@ export default function SearchBar({
     }
   }, [value]);
 
+  const modeButtonSx = (mode: SearchMode) => ({
+    border: 1,
+    borderRadius: 1,
+    borderColor: searchMode === mode ? 'primary.main' : 'divider',
+    bgcolor: searchMode === mode ? 'primary.main' : 'background.paper',
+    color: searchMode === mode ? 'primary.contrastText' : 'text.secondary',
+    '&:hover': {
+      bgcolor: searchMode === mode ? 'primary.dark' : 'action.hover',
+    },
+    flexShrink: 0,
+    width: 40,
+    height: 40,
+  });
+
   return (
     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
       <TextField
@@ -64,7 +80,7 @@ export default function SearchBar({
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        placeholder={semantic ? 'Semantic search (press Enter)...' : placeholder}
+        placeholder={searchMode === 'semantic' ? 'Semantic search (press Enter)...' : placeholder}
         inputRef={inputRef}
         InputProps={{
           startAdornment: (
@@ -83,70 +99,68 @@ export default function SearchBar({
         sx={{
           backgroundColor: 'background.paper',
           borderRadius: 1,
-          ...(semantic && {
+          ...(searchMode === 'semantic' && {
             '& .MuiOutlinedInput-root': {
               '& fieldset': { borderColor: 'primary.main', borderWidth: 2 },
             },
           }),
         }}
       />
-      {onSemanticChange && (
-        <Tooltip title={semantic ? 'Semantic search ON — click to switch to keyword search' : 'Enable semantic (AI) search'}>
-          <IconButton
-            size="small"
-            onClick={() => onSemanticChange(!semantic)}
-            sx={{
-              border: 1,
-              borderRadius: 1,
-              borderColor: semantic ? 'primary.main' : 'divider',
-              bgcolor: semantic ? 'primary.main' : 'background.paper',
-              color: semantic ? 'primary.contrastText' : 'text.secondary',
-              '&:hover': {
-                bgcolor: semantic ? 'primary.dark' : 'action.hover',
-              },
-              flexShrink: 0,
-              width: 40,
-              height: 40,
-            }}
-          >
-            <PsychologyIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
+      {onSearchModeChange && (
+        <>
+          <Tooltip title="Keyword search — exact text matching">
+            <IconButton size="small" onClick={() => onSearchModeChange('keyword')} sx={modeButtonSx('keyword')}>
+              <AbcIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Fuzzy search — approximate text matching">
+            <IconButton size="small" onClick={() => onSearchModeChange('fuzzy')} sx={modeButtonSx('fuzzy')}>
+              <ManageSearchIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Semantic search — search by meaning (AI)">
+            <IconButton size="small" onClick={() => onSearchModeChange('semantic')} sx={modeButtonSx('semantic')}>
+              <PsychologyIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </>
       )}
-      {onSearchFieldChange && !semantic && (
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <Select
-            value={searchField}
-            onChange={handleSearchFieldChange}
-            displayEmpty
-            sx={{
-              backgroundColor: 'background.paper',
-              borderRadius: 1,
-              '& .MuiOutlinedInput-root': {
-                '& fieldset': {
-                  borderColor: 'rgba(0, 0, 0, 0.23)',
+      {onSearchFieldChange && (
+        <Tooltip title={searchMode === 'semantic' ? 'Field filter is not available in semantic search' : ''}>
+          <FormControl size="small" sx={{ minWidth: 120 }} disabled={searchMode === 'semantic'}>
+            <Select
+              value={searchField}
+              onChange={handleSearchFieldChange}
+              displayEmpty
+              sx={{
+                backgroundColor: 'background.paper',
+                borderRadius: 1,
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': {
+                    borderColor: 'rgba(0, 0, 0, 0.23)',
+                  },
                 },
-              },
-            }}
-            MenuProps={{
-              PaperProps: {
-                sx: {
-                  bgcolor: 'background.paper',
-                  '& .MuiMenuItem-root': {
-                    color: 'text.primary'
+              }}
+              MenuProps={{
+                PaperProps: {
+                  sx: {
+                    bgcolor: 'background.paper',
+                    '& .MuiMenuItem-root': {
+                      color: 'text.primary'
+                    }
                   }
                 }
-              }
-            }}
-          >
-            <MenuItem value="all">All</MenuItem>
-            <MenuItem value="title">Title</MenuItem>
-            <MenuItem value="content">Content</MenuItem>
-            <MenuItem value="description">Description</MenuItem>
-            <MenuItem value="tags">Tags</MenuItem>
-            <MenuItem value="collection">Collection</MenuItem>
-          </Select>
-        </FormControl>
+              }}
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="title">Title</MenuItem>
+              <MenuItem value="content">Content</MenuItem>
+              <MenuItem value="description">Description</MenuItem>
+              <MenuItem value="tags">Tags</MenuItem>
+              <MenuItem value="collection">Collection</MenuItem>
+            </Select>
+          </FormControl>
+        </Tooltip>
       )}
     </div>
   );
