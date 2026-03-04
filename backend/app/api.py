@@ -47,6 +47,8 @@ async def lifespan(_app: FastAPI):
     """Initialize the database on startup."""
     from app.database import init_db
     await init_db()
+    from app.embeddings import agenerate_query_embedding
+    await agenerate_query_embedding("")  # warm up model so first semantic search is instant
     yield
 
 
