@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCollections } from '../contexts/CollectionsContext';
 import { usePrompts } from '../contexts/PromptsContext';
@@ -7,10 +7,11 @@ import {
   Typography,
   CircularProgress,
   Alert,
-  Box
+  Box,
+  Fab,
 } from '@mui/material';
 import { Grid } from '@mui/material';
-import { Add as AddIcon } from '@mui/icons-material';
+import { Add as AddIcon, KeyboardArrowUp as KeyboardArrowUpIcon } from '@mui/icons-material';
 import ConfirmationDialog from '../components/ConfirmationDialog';
 import VersionHistoryDialog from '../components/VersionHistoryDialog';
 import CollectionCard from '../components/CollectionCard';
@@ -23,6 +24,18 @@ export default function CollectionsPage() {
   const navigate = useNavigate();
   const { collections, loading, error, remove, refetch } = useCollections();
   const { prompts: allPrompts, refetch: refetchPrompts, remove: removePrompt } = usePrompts();
+
+  // ── Scroll tracking ───────────────────────────────────────────────────────
+  const [scrollY, setScrollY] = useState(0);
+  useEffect(() => {
+    const handle = () => setScrollY(window.scrollY);
+    window.addEventListener('scroll', handle, { passive: true });
+    return () => window.removeEventListener('scroll', handle);
+  }, []);
+  const showScrollTop = scrollY > 400;
+  const docScrollable = document.documentElement.scrollHeight - window.innerHeight;
+  const fraction = docScrollable > 0 ? scrollY / docScrollable : 1;
+  const currentIndex = Math.min(Math.round(fraction * collections.length), collections.length);
 
   // Create dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -135,6 +148,42 @@ export default function CollectionsPage() {
             </Grid>
           ))}
         </Grid>
+      )}
+
+      {/* Position indicator */}
+      {collections.length > 0 && (
+        <Box
+          sx={{
+            position: 'fixed',
+            bottom: 24,
+            left: 24,
+            zIndex: 1200,
+            bgcolor: 'background.paper',
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 2,
+            px: 1.5,
+            py: 0.5,
+            typography: 'caption',
+            color: 'text.secondary',
+            boxShadow: 1,
+            userSelect: 'none',
+          }}
+        >
+          {currentIndex} / {collections.length}
+        </Box>
+      )}
+
+      {/* Scroll-to-top */}
+      {showScrollTop && (
+        <Fab
+          size="small"
+          aria-label="Scroll to top"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          sx={{ position: 'fixed', bottom: 24, right: 24, zIndex: 1200 }}
+        >
+          <KeyboardArrowUpIcon />
+        </Fab>
       )}
 
       {/* Create Collection */}
