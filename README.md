@@ -100,6 +100,60 @@ python -m pytest tests/ -v --tb=short
 
 ---
 
+## Authentication
+
+PromptLab uses a static API key to protect all endpoints. Authentication is **disabled by default** (useful for local development and testing) and enabled by setting the `API_KEY` environment variable.
+
+### Enabling authentication
+
+**1. Generate a key**
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+**2. Set the key on the backend**
+
+Add it to your `.env` file (copy `.env.example` as a starting point):
+
+```
+API_KEY=your-generated-key-here
+```
+
+Or pass it directly to Docker Compose:
+
+```bash
+API_KEY=your-generated-key-here docker-compose up
+```
+
+**3. Rebuild**
+
+Docker Compose automatically passes `API_KEY` to the frontend build as `VITE_API_KEY` (Vite bakes it into the JS bundle at build time), so there's only one variable to set:
+
+```bash
+docker-compose up --build
+```
+
+### How it works
+
+- **Web UI (port 3000):** nginx HTTP Basic Auth — browser shows a username/password dialog. Username is `admin`, password is your `API_KEY`.
+- **Backend API (port 8000):** every request must include the header `X-API-Key: <your-key>`. The frontend sends this automatically (key is baked in at build time).
+- The `/health` endpoint is always public (required for Docker health checks).
+- Leaving `API_KEY` empty disables all auth (dev/test mode).
+
+### Making authenticated API calls
+
+```bash
+# With curl
+curl -H "X-API-Key: your-key" http://localhost:8000/prompts
+
+# Without a key when auth is enabled → 401
+curl http://localhost:8000/prompts
+# {"detail": "Invalid or missing API key"}
+```
+
+---
+
 ## API Summary
 
 - Base URL: `http://localhost:8000`

@@ -18,10 +18,23 @@ Note:
     ``allow_origins=["*"]`` is invalid under the CORS specification and is
     rejected by browsers. The frontend does not send cookies or authorization
     headers, so credentials support is not required.
+
+Authentication:
+    When the ``API_KEY`` environment variable is set, all endpoints require an
+    ``X-API-Key`` header matching that value. The ``/health`` endpoint is always
+    public so Docker health checks continue to work.
+
+    For the SSE endpoint (``/admin/events``), which uses the native
+    ``EventSource`` API that cannot send custom headers, pass the key as a
+    ``?api_key=`` query parameter instead.
+
+    Leave ``API_KEY`` unset (or empty) to disable authentication — useful for
+    local development and testing.
 """
 
 import logging
 import random
+import secrets
 import uuid
 import asyncio
 from contextlib import asynccontextmanager
@@ -32,6 +45,7 @@ from fastapi import FastAPI, HTTPException, Body, Request, status, BackgroundTas
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Literal, Optional
 
 from app.models import (
@@ -43,6 +57,33 @@ from app.models import (
 )
 from app.storage import storage
 from app import __version__
+from app.database import get_settings
+
+
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    """Enforce API key authentication on all endpoints except /health.
+
+    Authentication is disabled when the ``API_KEY`` setting is empty, which is
+    the default for local development and test environments.
+
+    Clients should send the key in the ``X-API-Key`` request header. For the
+    SSE endpoint (which uses ``EventSource`` and cannot send custom headers),
+    pass the key via the ``?api_key=`` query parameter instead.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        expected = get_settings().api_key
+        if not expected:
+            return await call_next(request)
+        if request.url.path == "/health":
+            return await call_next(request)
+        key = request.headers.get("X-API-Key") or request.query_params.get("api_key")
+        if not key or not secrets.compare_digest(key.encode(), expected.encode()):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or missing API key"},
+            )
+        return await call_next(request)
 
 
 @asynccontextmanager
@@ -61,6 +102,9 @@ app = FastAPI(
     version=__version__,
     lifespan=lifespan,
 )
+
+# Auth middleware — runs before CORS so unauthenticated requests are rejected early
+app.add_middleware(APIKeyMiddleware)
 
 # CORS middleware
 app.add_middleware(

@@ -5,8 +5,45 @@ Base URL (local): `http://localhost:8000`
 - Swagger UI: `GET /docs`
 - OpenAPI JSON: `GET /openapi.json`
 - Content type: JSON (`Content-Type: application/json`)
-- Auth: none
+- Auth: API key (see below)
 - Storage: PostgreSQL (data persists across restarts)
+
+---
+
+## Authentication
+
+Authentication is controlled by the `API_KEY` environment variable on the backend.
+
+- **Disabled (default):** Leave `API_KEY` empty. All requests pass through — suitable for local development and testing.
+- **Enabled:** Set `API_KEY` to a strong random value. Every request must include the matching key.
+
+### Required header (all endpoints except `/health`)
+
+```
+X-API-Key: <your-api-key>
+```
+
+### SSE endpoint exception
+
+The `/admin/events` endpoint is consumed via the browser's `EventSource` API, which cannot send custom headers. Pass the key as a query parameter instead:
+
+```
+GET /admin/events?api_key=<your-api-key>
+```
+
+### Error response (401 Unauthorized)
+
+Returned when the key is missing or incorrect:
+
+```json
+{ "detail": "Invalid or missing API key" }
+```
+
+### Generating a key
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
 
 ---
 

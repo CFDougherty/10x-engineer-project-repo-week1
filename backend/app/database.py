@@ -11,6 +11,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://promptlab:promptlab@localhost:5432/promptlab"
     test_database_url: str = ""
+    api_key: str = ""  # Empty = auth disabled (dev/test mode). Set a strong value in production.
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

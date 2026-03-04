@@ -28,6 +28,7 @@ services:
     environment:
       - PORT=8000
       - DATABASE_URL=postgresql+asyncpg://promptlab:promptlab@db:5432/promptlab
+      - API_KEY=${API_KEY:-}
     volumes:
       - ./backend/app:/app/app
       - ./backend/main.py:/app/main.py
@@ -47,7 +48,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - API_KEY=${API_KEY:-}
     container_name: promptlab_frontend
+    environment:
+      - API_KEY=${API_KEY:-}
     ports:
       - "3000:80"
     depends_on:
