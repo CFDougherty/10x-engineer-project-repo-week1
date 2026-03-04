@@ -944,3 +944,363 @@ class TestVersioningStorage:
         # Never called create_prompt_version
         result = await s.get_prompt_version(prompt.id, 1)
         assert result is None
+
+
+class TestBatchOperations:
+    """Tests for batch storage operations."""
+
+    async def test_batch_create_prompts_empty_list_is_noop(self):
+        """batch_create_prompts([]) must return None without touching the database."""
+        s = Storage()
+        result = await s.batch_create_prompts([])
+        assert result is None
+        assert len(await s.get_all_prompts()) == 0
+
+    async def test_batch_update_collection_ids_empty_list_is_noop(self):
+        """batch_update_collection_ids([]) must return without error."""
+        s = Storage()
+        result = await s.batch_update_collection_ids([])
+        assert result is None
+
+    async def test_batch_set_embeddings_empty_list_is_noop(self):
+        """batch_set_embeddings([]) must return without error."""
+        s = Storage()
+        result = await s.batch_set_embeddings([])
+        assert result is None
+
+    async def test_batch_create_prompts_inserts_all(self):
+        """batch_create_prompts must insert every prompt in one transaction."""
+        s = Storage()
+        prompts = [Prompt(title=f"P{i}", content="c") for i in range(3)]
+        await s.batch_create_prompts(prompts)
+        all_prompts = await s.get_all_prompts()
+        assert len(all_prompts) == 3
+
+    async def test_count_embedded_prompts_with_collection_filter(self):
+        """count_embedded_prompts must count only prompts in the given collection."""
+        from app.models import Collection
+        s = Storage()
+
+        col = Collection(name="Col1")
+        await s.create_collection(col)
+
+        p1 = Prompt(title="In Col", content="c", collection_id=col.id)
+        p2 = Prompt(title="No Col", content="c")
+        await s.create_prompt(p1)
+        await s.create_prompt(p2)
+
+        count_all = await s.count_embedded_prompts()
+        count_col = await s.count_embedded_prompts(collection_id=col.id)
+        assert count_all == 0
+        assert count_col == 0
+
+
+class TestCursorHelpers:
+    """Tests for _encode_cursor / _decode_cursor helpers."""
+
+    def test_decode_cursor_invalid_base64_raises_value_error(self):
+        """_decode_cursor must raise ValueError for non-base64 input."""
+        from app.storage import _decode_cursor
+        with pytest.raises(ValueError, match="Invalid pagination cursor"):
+            _decode_cursor("!!!not-base64!!!")
+
+    def test_decode_cursor_valid_base64_but_invalid_json_raises_value_error(self):
+        """_decode_cursor must raise ValueError when base64 decodes to non-JSON."""
+        import base64
+        from app.storage import _decode_cursor
+        bad = base64.urlsafe_b64encode(b"not json at all").decode()
+        with pytest.raises(ValueError, match="Invalid pagination cursor"):
+            _decode_cursor(bad)
+
+    def test_decode_cursor_valid_json_missing_keys_raises_value_error(self):
+        """_decode_cursor must raise ValueError when JSON is missing 't' or 'id' keys."""
+        import base64, json
+        from app.storage import _decode_cursor
+        payload = base64.urlsafe_b64encode(json.dumps({"x": 1}).encode()).decode()
+        with pytest.raises(ValueError, match="Invalid pagination cursor"):
+            _decode_cursor(payload)
+
+    def test_roundtrip_encode_decode(self):
+        """_encode_cursor / _decode_cursor must round-trip correctly."""
+        from datetime import datetime, timezone
+        from app.storage import _encode_cursor, _decode_cursor
+        import uuid
+        ts = datetime.now(timezone.utc).replace(tzinfo=None)
+        pid = str(uuid.uuid4())
+        cursor = _encode_cursor(ts, pid)
+        decoded_ts, decoded_id = _decode_cursor(cursor)
+        assert decoded_id == pid
+        assert abs((decoded_ts - ts).total_seconds()) < 1
+
+
+class TestBackfillEmbeddings:
+    """Tests for storage.backfill_embeddings()."""
+
+    async def test_backfill_returns_zero_when_no_prompts(self):
+        """backfill_embeddings must return 0 when no prompts exist."""
+        s = Storage()
+        count = await s.backfill_embeddings(generate_fn=lambda *_: [0.0] * 384)
+        assert count == 0
+
+    async def test_backfill_batch_failure_falls_back_to_per_item(self):
+        """backfill_embeddings must fall back to per-item when generate_embeddings_batch raises."""
+        from unittest.mock import patch
+        s = Storage()
+
+        p = Prompt(title="Need Embed", content="content")
+        await s.create_prompt(p)
+
+        fake_vec = [0.1] * 384
+
+        def per_item_fn(*_):
+            return fake_vec
+
+        with patch("app.embeddings.generate_embeddings_batch", side_effect=RuntimeError("batch unavailable")):
+            count = await s.backfill_embeddings(generate_fn=per_item_fn)
+
+        assert count == 1
+
+    async def test_backfill_batch_success_path(self):
+        """backfill_embeddings success path — batch function returns vectors (line 672)."""
+        from unittest.mock import patch
+        s = Storage()
+
+        p = Prompt(title="Batchable", content="some content")
+        await s.create_prompt(p)
+
+        fake_vec = [0.2] * 384
+
+        with patch("app.embeddings.generate_embeddings_batch", return_value=[fake_vec]):
+            count = await s.backfill_embeddings(generate_fn=lambda *_: fake_vec)
+
+        assert count == 1
+
+
+class TestGetPromptsPage:
+    """Direct tests for storage.get_prompts_page() to cover the fetch/pagination body."""
+
+    async def test_first_page_empty_db(self):
+        """get_prompts_page on an empty DB returns empty list with no cursor."""
+        storage = Storage()
+        prompts, cursor, total = await storage.get_prompts_page(limit=10)
+        assert prompts == []
+        assert cursor is None
+        assert total == 0
+
+    async def test_first_page_returns_prompts(self):
+        """get_prompts_page first page returns available prompts."""
+        storage = Storage()
+        p1 = Prompt(title="Alpha", content="c")
+        p2 = Prompt(title="Beta", content="c")
+        await storage.create_prompt(p1)
+        await storage.create_prompt(p2)
+
+        prompts, _, total = await storage.get_prompts_page(limit=10)
+        assert total == 2
+        assert len(prompts) == 2
+
+    async def test_first_page_generates_next_cursor_when_more_results(self):
+        """get_prompts_page emits a next_cursor when results exceed the limit."""
+        storage = Storage()
+        for i in range(5):
+            await storage.create_prompt(Prompt(title=f"P{i}", content="c"))
+
+        prompts, cursor, total = await storage.get_prompts_page(limit=3)
+        assert len(prompts) == 3
+        assert cursor is not None
+        assert total == 5
+
+    async def test_keyset_cursor_pagination(self):
+        """get_prompts_page with a cursor returns the next page."""
+        storage = Storage()
+        for i in range(5):
+            await storage.create_prompt(Prompt(title=f"P{i}", content="c"))
+
+        page1, cursor, _ = await storage.get_prompts_page(limit=3)
+        assert cursor is not None
+        assert len(page1) == 3
+
+        page2, cursor2, _ = await storage.get_prompts_page(limit=3, cursor=cursor)
+        assert len(page2) == 2
+        assert cursor2 is None
+
+        # All prompts are distinct across pages
+        ids1 = {p.id for p in page1}
+        ids2 = {p.id for p in page2}
+        assert ids1.isdisjoint(ids2)
+
+    async def test_keyset_cursor_with_more_pages_emits_next_cursor(self):
+        """get_prompts_page with a cursor emits a next_cursor when further pages remain."""
+        storage = Storage()
+        for i in range(7):
+            await storage.create_prompt(Prompt(title=f"P{i}", content="c"))
+
+        # Page 1 → cursor for page 2
+        _, cursor1, _ = await storage.get_prompts_page(limit=3)
+        assert cursor1 is not None
+
+        # Page 2 (cursor branch) → more items remain, so cursor2 must be set
+        page2, cursor2, _ = await storage.get_prompts_page(limit=3, cursor=cursor1)
+        assert len(page2) == 3
+        assert cursor2 is not None  # lines 304, 306-307 exercised
+
+        # Page 3 → no more items
+        page3, cursor3, _ = await storage.get_prompts_page(limit=3, cursor=cursor2)
+        assert len(page3) == 1
+        assert cursor3 is None
+
+    async def test_offset_pagination(self):
+        """get_prompts_page with offset skips the first N results."""
+        storage = Storage()
+        for i in range(4):
+            await storage.create_prompt(Prompt(title=f"P{i}", content="c"))
+
+        all_prompts, _, _ = await storage.get_prompts_page(limit=10)
+        page2, _, _ = await storage.get_prompts_page(limit=10, offset=2)
+        assert len(page2) == 2
+        assert all_prompts[2].id == page2[0].id
+
+    async def test_search_filter(self):
+        """get_prompts_page with search returns only matching prompts."""
+        storage = Storage()
+        await storage.create_prompt(Prompt(title="Python Tutorial", content="c"))
+        await storage.create_prompt(Prompt(title="Java Guide", content="c"))
+
+        prompts, _, total = await storage.get_prompts_page(limit=10, search="Python", fuzzy=False)
+        assert total == 1
+        assert prompts[0].title == "Python Tutorial"
+
+    async def test_collection_id_filter(self):
+        """get_prompts_page with collection_id filters by collection."""
+        storage = Storage()
+        from app.models import Collection
+        col = Collection(name="MyCol")
+        await storage.create_collection(col)
+
+        p_in = Prompt(title="In", content="c", collection_id=col.id)
+        p_out = Prompt(title="Out", content="c")
+        await storage.create_prompt(p_in)
+        await storage.create_prompt(p_out)
+
+        prompts, _, total = await storage.get_prompts_page(limit=10, collection_id=col.id)
+        assert total == 1
+        assert prompts[0].title == "In"
+
+    async def test_collection_search_field(self):
+        """get_prompts_page with search_field='collection' searches by collection name."""
+        storage = Storage()
+        from app.models import Collection
+        col = Collection(name="UniqueColSearchName")
+        await storage.create_collection(col)
+
+        p = Prompt(title="Prompt", content="c", collection_id=col.id)
+        await storage.create_prompt(p)
+        await storage.create_prompt(Prompt(title="Other", content="c"))
+
+        prompts, _, total = await storage.get_prompts_page(
+            limit=10, search="UniqueColSearch", search_field="collection", fuzzy=False
+        )
+        assert total == 1
+        assert prompts[0].title == "Prompt"
+
+    async def test_update_collection_not_found_returns_none(self):
+        """update_collection must return None when the collection_id does not exist."""
+        storage = Storage()
+        from app.models import Collection
+        result = await storage.update_collection("nonexistent-id", Collection(name="X"))
+        assert result is None
+
+    async def test_batch_update_collection_ids_actual_assignments(self):
+        """batch_update_collection_ids must set collection_id for each (prompt_id, col_id) pair."""
+        storage = Storage()
+        from app.models import Collection
+        col = Collection(name="Batch Col")
+        await storage.create_collection(col)
+
+        p = Prompt(title="Assignable", content="c")
+        await storage.create_prompt(p)
+
+        await storage.batch_update_collection_ids([(p.id, col.id)])
+
+        updated = await storage.get_prompt(p.id)
+        assert updated.collection_id == col.id
+
+
+class TestSemanticSearch:
+    """Tests for storage.semantic_search() and count_semantic_results()."""
+
+    async def test_semantic_search_no_embeddings_returns_empty(self):
+        """semantic_search returns empty list when no prompts have embeddings."""
+        storage = Storage()
+        await storage.create_prompt(Prompt(title="No Embed", content="c"))
+        query_vec = [0.1] * 384
+        results = await storage.semantic_search(query_embedding=query_vec, limit=10)
+        assert results == []
+
+    async def test_semantic_search_finds_similar_prompt(self):
+        """semantic_search returns prompts whose embeddings are close to the query."""
+        storage = Storage()
+        p = Prompt(title="Embedded", content="c")
+        await storage.create_prompt(p)
+
+        # Give it an embedding identical to the query (cosine distance = 0)
+        vec = [1.0] + [0.0] * 383
+        await storage.batch_set_embeddings([(p.id, vec)])
+
+        results = await storage.semantic_search(query_embedding=vec, limit=10)
+        assert len(results) == 1
+        assert results[0].id == p.id
+
+    async def test_count_semantic_results_with_embeddings(self):
+        """count_semantic_results returns correct count of matching prompts."""
+        storage = Storage()
+        p = Prompt(title="Countable", content="c")
+        await storage.create_prompt(p)
+
+        vec = [1.0] + [0.0] * 383
+        await storage.batch_set_embeddings([(p.id, vec)])
+
+        count = await storage.count_semantic_results(query_embedding=vec)
+        assert count == 1
+
+    async def test_count_semantic_results_no_embeddings(self):
+        """count_semantic_results returns 0 when no prompts have embeddings."""
+        storage = Storage()
+        await storage.create_prompt(Prompt(title="No vec", content="c"))
+        count = await storage.count_semantic_results(query_embedding=[0.1] * 384)
+        assert count == 0
+
+    async def test_semantic_search_with_collection_id_filter(self):
+        """semantic_search with collection_id returns only prompts in that collection."""
+        storage = Storage()
+        col = Collection(name="Filtered Col")
+        await storage.create_collection(col)
+
+        p_in = Prompt(title="In col", content="c", collection_id=col.id)
+        p_out = Prompt(title="Out col", content="c")
+        await storage.create_prompt(p_in)
+        await storage.create_prompt(p_out)
+
+        vec = [1.0] + [0.0] * 383
+        await storage.batch_set_embeddings([(p_in.id, vec), (p_out.id, vec)])
+
+        results = await storage.semantic_search(query_embedding=vec, limit=10, collection_id=col.id)
+        assert len(results) == 1
+        assert results[0].id == p_in.id
+
+    async def test_count_semantic_results_with_collection_id_filter(self):
+        """count_semantic_results with collection_id counts only prompts in that collection."""
+        storage = Storage()
+        col = Collection(name="Count Col")
+        await storage.create_collection(col)
+
+        p_in = Prompt(title="In col", content="c", collection_id=col.id)
+        p_out = Prompt(title="Out col", content="c")
+        await storage.create_prompt(p_in)
+        await storage.create_prompt(p_out)
+
+        vec = [1.0] + [0.0] * 383
+        await storage.batch_set_embeddings([(p_in.id, vec), (p_out.id, vec)])
+
+        count = await storage.count_semantic_results(query_embedding=vec, collection_id=col.id)
+        assert count == 1

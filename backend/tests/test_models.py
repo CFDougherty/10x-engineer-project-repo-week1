@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime
+from unittest.mock import patch
 from uuid import UUID
 
 import pytest
@@ -15,6 +16,7 @@ from app.models import (
     Collection,
     PromptList,
     CollectionList,
+    sanitize_html,
 )
 
 
@@ -335,6 +337,14 @@ class TestModelCopying:
         assert copy.id != original.id
         assert copy.title == original.title
 
+    def test_prompt_copy_with_update_overrides_fields(self):
+        """model_copy(update={...}) must merge the provided updates into the copy."""
+        original = Prompt(title="Original", content="Content")
+        copy = original.model_copy(update={"title": "Updated"})
+        assert copy.title == "Updated"
+        assert copy.content == original.content
+        assert copy.id != original.id
+
 
 class TestUnicodeAndSpecialCharacters:
     """Test handling of unicode and special characters."""
@@ -562,3 +572,56 @@ class TestCollectionEqualityEdgeCases:
         assert c != "not a collection"
         assert c != 42
         assert c != None
+
+
+class TestSanitizeHtmlEdgeCases:
+    """Tests for sanitize_html and Prompt truncation after sanitization."""
+
+    def test_sanitize_html_non_string_returns_unchanged(self):
+        """sanitize_html must return non-string input as-is."""
+        assert sanitize_html(123) == 123
+        assert sanitize_html(None) is None
+
+    def test_prompt_invalid_uuid_id_raises(self):
+        """Constructing a Prompt with a non-UUID id must raise ValueError."""
+        with pytest.raises(ValidationError, match="id must be a valid UUID"):
+            Prompt(id="not-a-uuid", title="Test Title", content="Test content here")
+
+    def test_title_truncation_after_sanitize_expansion(self):
+        """Title must be truncated to 200 chars if sanitization expands it beyond 200."""
+        def expanding_sanitize(text):
+            if not isinstance(text, str):
+                return text
+            # Double the text to simulate expansion
+            return text * 2
+
+        with patch("app.models.sanitize_html", side_effect=expanding_sanitize):
+            p = Prompt(title="a" * 150, content="content")
+        # 150 * 2 = 300 > 200, but raw (150) <= 200, so truncation fires
+        assert len(p.title) == 200
+
+    def test_description_truncation_after_sanitize_expansion(self):
+        """Description must be truncated to 500 chars if sanitization expands it beyond 500."""
+        def expanding_sanitize(text):
+            if not isinstance(text, str):
+                return text
+            return text * 2
+
+        with patch("app.models.sanitize_html", side_effect=expanding_sanitize):
+            p = Prompt(title="a" * 10, content="content", description="b" * 300)
+        # 300 * 2 = 600 > 500, but raw (300) <= 500, so truncation fires
+        assert len(p.description) == 500
+
+
+class TestModelsDbUtcnow:
+    """Test for models_db._utcnow helper."""
+
+    def test_utcnow_returns_naive_datetime(self):
+        """_utcnow must return a naive datetime close to now."""
+        from app.models_db import _utcnow
+        result = _utcnow()
+        assert result.tzinfo is None
+        # Should be close to now
+        from datetime import timezone
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        assert abs((now - result).total_seconds()) < 2

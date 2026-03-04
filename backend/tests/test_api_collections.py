@@ -495,3 +495,48 @@ class TestCollections:
         patch_resp = client.patch(f"/collections/{collection_id}", json={"name": ""})
         assert patch_resp.status_code == 200
         assert patch_resp.json()["name"] == original_name
+
+
+class TestDeleteCollectionCascade:
+    """Tests for cascade-delete behaviour of DELETE /collections/{id}."""
+
+    def test_delete_collection_removes_associated_prompts(
+        self, client: TestClient, sample_collection_data
+    ):
+        """DELETE /collections/{id} must delete all prompts belonging to that collection.
+
+        Prompts in other collections (or with no collection) must not be affected.
+        """
+        col_resp = client.post("/collections", json=sample_collection_data)
+        assert col_resp.status_code == 201
+        col_id = col_resp.json()["id"]
+
+        # Create two prompts in the collection
+        for i in range(2):
+            client.post("/prompts", json={
+                "title": f"Prompt {i}",
+                "content": "Content",
+                "collection_id": col_id,
+            })
+
+        # Create one prompt outside the collection
+        client.post("/prompts", json={"title": "Orphan", "content": "Content"})
+
+        assert client.get("/prompts").json()["total"] == 3
+
+        del_resp = client.delete(f"/collections/{col_id}")
+        assert del_resp.status_code == 204
+
+        remaining = client.get("/prompts").json()
+        assert remaining["total"] == 1
+        assert remaining["prompts"][0]["title"] == "Orphan"
+
+    def test_delete_collection_with_no_prompts_returns_204(
+        self, client: TestClient, sample_collection_data
+    ):
+        """DELETE /collections/{id} must succeed with 204 when the collection has no prompts."""
+        col_resp = client.post("/collections", json=sample_collection_data)
+        col_id = col_resp.json()["id"]
+
+        del_resp = client.delete(f"/collections/{col_id}")
+        assert del_resp.status_code == 204

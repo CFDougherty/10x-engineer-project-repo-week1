@@ -1,7 +1,8 @@
 """Tests for admin API endpoints."""
 
+import asyncio
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 from app.api import app
 from app.storage import storage
@@ -183,3 +184,341 @@ def test_clear_all_data_storage_exception_returns_500():
         response = client.delete("/admin/clear-all-data")
     assert response.status_code == 500
     assert "Failed to clear data" in response.json()["detail"]
+
+
+async def test_clear_test_data_with_tagged_prompts():
+    """DELETE /admin/clear-test-data must remove only prompts tagged 'test fill'."""
+    await storage.clear()
+
+    tagged = Prompt(id=str(uuid.uuid4()), title="Tagged", content="content", tags=["test fill"])
+    untagged = Prompt(id=str(uuid.uuid4()), title="Untagged", content="content", tags=["other"])
+    await storage.create_prompt(tagged)
+    await storage.create_prompt(untagged)
+
+    response = client.delete("/admin/clear-test-data")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["prompts_removed"] == 1
+
+    remaining = await storage.get_all_prompts()
+    assert len(remaining) == 1
+    assert remaining[0].title == "Untagged"
+
+
+async def test_clear_test_data_no_tagged_prompts():
+    """DELETE /admin/clear-test-data must return 0 when no 'test fill' prompts exist."""
+    await storage.clear()
+
+    p = Prompt(id=str(uuid.uuid4()), title="Regular", content="content", tags=["other"])
+    await storage.create_prompt(p)
+
+    response = client.delete("/admin/clear-test-data")
+    assert response.status_code == 200
+    assert response.json()["prompts_removed"] == 0
+
+
+async def test_embedding_status_empty_db():
+    """GET /admin/embedding-status must report complete=True when no prompts exist."""
+    await storage.clear()
+    response = client.get("/admin/embedding-status")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 0
+    assert data["embedded"] == 0
+    assert data["complete"] is True
+
+
+async def test_embedding_status_with_unembedded_prompt():
+    """GET /admin/embedding-status reports complete=False when some prompts lack embeddings."""
+    await storage.clear()
+    p = Prompt(id=str(uuid.uuid4()), title="No Embedding", content="content")
+    await storage.create_prompt(p)
+
+    response = client.get("/admin/embedding-status")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["complete"] is False
+
+
+def test_backfill_embeddings_503_on_runtime_error():
+    """POST /admin/backfill-embeddings must return 503 when the model raises RuntimeError."""
+    with patch.object(storage, "backfill_embeddings", side_effect=RuntimeError("model unavailable")):
+        response = client.post("/admin/backfill-embeddings")
+    assert response.status_code == 503
+    assert "unavailable" in response.json()["detail"].lower()
+
+
+def test_backfill_embeddings_500_on_unexpected_error():
+    """POST /admin/backfill-embeddings must return 500 on unexpected exceptions."""
+    with patch.object(storage, "backfill_embeddings", side_effect=Exception("unexpected")):
+        response = client.post("/admin/backfill-embeddings")
+    assert response.status_code == 500
+    assert "unexpected" in response.json()["detail"]
+
+
+async def test_populate_template_data_source():
+    """POST /admin/populate-test-data with data_source='template' must create prompts."""
+    await storage.clear()
+
+    response = client.post("/admin/populate-test-data", json={
+        "data_source": "template",
+        "num_prompts": 5,
+        "num_collections": 1,
+        "random_seed": 42,
+    })
+    assert response.status_code == 202
+
+    prompts = await storage.get_all_prompts()
+    assert len(prompts) == 5
+
+
+def test_query_param_api_key_allows_access():
+    """GET /prompts?api_key=<key> must succeed when API key auth is enabled."""
+    import os
+    from app.database import get_settings
+
+    TEST_KEY = "test-qparam-key"
+    os.environ["API_KEY"] = TEST_KEY
+    get_settings.cache_clear()
+    try:
+        resp = client.get(f"/prompts?api_key={TEST_KEY}")
+        assert resp.status_code == 200
+    finally:
+        os.environ.pop("API_KEY", None)
+        get_settings.cache_clear()
+
+
+async def test_notify_sse_clients_delivers_to_queues():
+    """notify_sse_clients must put the message into every registered queue."""
+    import asyncio
+    from app.api import notify_sse_clients, sse_client_queues
+
+    q1: asyncio.Queue = asyncio.Queue()
+    q2: asyncio.Queue = asyncio.Queue()
+    sse_client_queues.clear()
+    sse_client_queues.extend([q1, q2])
+    try:
+        await notify_sse_clients('{"event": "test"}')
+        assert q1.get_nowait() == '{"event": "test"}'
+        assert q2.get_nowait() == '{"event": "test"}'
+    finally:
+        sse_client_queues.clear()
+
+
+# ── Backfill embeddings success path (api.py L1065-1072) ──
+
+
+def test_backfill_embeddings_success():
+    """POST /admin/backfill-embeddings success path returns updated count."""
+    with (
+        patch("app.embeddings.generate_embedding", return_value=[0.1] * 384),
+        patch.object(storage, "backfill_embeddings", new_callable=AsyncMock, return_value=7),
+    ):
+        response = client.post("/admin/backfill-embeddings")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["updated"] == 7
+    assert "7 prompt(s)" in data["message"]
+
+
+# ── Clear test data exception path (api.py L1027-1031) ──
+
+
+def test_clear_test_data_exception_returns_500():
+    """DELETE /admin/clear-test-data must return 500 when storage raises."""
+    with patch.object(storage, "get_all_prompts", new_callable=AsyncMock, side_effect=RuntimeError("db down")):
+        response = client.delete("/admin/clear-test-data")
+    assert response.status_code == 500
+    assert "Failed to clear test data" in response.json()["detail"]
+
+
+# ── Embedding status with complete=True when total > 0 (api.py L1049) ──
+
+
+async def test_embedding_status_all_embedded():
+    """GET /admin/embedding-status reports complete=True when all prompts have embeddings."""
+    await storage.clear()
+    p = Prompt(id=str(uuid.uuid4()), title="Embedded Prompt", content="content")
+    await storage.create_prompt(p)
+    vec = [1.0] + [0.0] * 383
+    await storage.batch_set_embeddings([(p.id, vec)])
+
+    response = client.get("/admin/embedding-status")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["embedded"] == 1
+    assert data["complete"] is True
+
+
+# ── Populate without random_seed (api.py L951-952) ──
+
+
+def test_populate_without_random_seed():
+    """POST /admin/populate-test-data without random_seed hits the else branch."""
+    import app.api as api_module
+    api_module._populate_progress.update({"current": 0, "total": 0, "active": False, "error": None})
+
+    response = client.post("/admin/populate-test-data", json={
+        "num_prompts": 2,
+        "num_collections": 1,
+    })
+    assert response.status_code == 202
+    assert response.json()["status"] == "started"
+
+
+# ── Populate with append_mode=True (api.py L756) ──
+
+
+async def test_populate_append_mode():
+    """append_mode=True must preserve existing data instead of clearing."""
+    await storage.clear()
+
+    existing = Prompt(id=str(uuid.uuid4()), title="Pre-existing", content="should survive")
+    await storage.create_prompt(existing)
+
+    response = client.post("/admin/populate-test-data", json={
+        "append_mode": True,
+        "num_prompts": 2,
+        "num_collections": 1,
+        "random_seed": 42,
+    })
+    assert response.status_code == 202
+
+    all_prompts = await storage.get_all_prompts()
+    ids = [p.id for p in all_prompts]
+    assert existing.id in ids
+    assert len(all_prompts) >= 3  # 1 existing + 2 new
+
+
+# ── Populate with tag_as_test_fill=True (api.py L782-783, L845-846) ──
+
+
+async def test_populate_tag_as_test_fill():
+    """tag_as_test_fill=True must add 'test fill' tag to every created prompt."""
+    await storage.clear()
+
+    response = client.post("/admin/populate-test-data", json={
+        "tag_as_test_fill": True,
+        "num_prompts": 3,
+        "num_collections": 1,
+        "random_seed": 42,
+    })
+    assert response.status_code == 202
+
+    all_prompts = await storage.get_all_prompts()
+    assert len(all_prompts) == 3
+    for p in all_prompts:
+        assert "test fill" in p.tags, f"Prompt {p.id!r} missing 'test fill' tag"
+
+
+# ── Populate backfill exception silently caught (api.py L921-925) ──
+
+
+async def test_populate_backfill_exception_silently_caught():
+    """Embedding backfill failure during populate must not set an error."""
+    await storage.clear()
+
+    with patch.object(storage, "backfill_embeddings", new_callable=AsyncMock, side_effect=RuntimeError("no model")):
+        response = client.post("/admin/populate-test-data", json={
+            "num_prompts": 2,
+            "num_collections": 1,
+            "random_seed": 42,
+        })
+
+    assert response.status_code == 202
+
+    status = client.get("/admin/populate-status").json()
+    assert status["error"] is None
+
+
+# ── SSE event stream generator tests (api.py L654-691) ──
+
+
+async def test_sse_connected_message():
+    """SSE generator yields the connected message first."""
+    from app.api import sse_endpoint, sse_client_queues
+
+    mock_request = MagicMock()
+    response = await sse_endpoint(mock_request)
+    gen = response.body_iterator
+
+    try:
+        first = await gen.__anext__()
+        assert '"event": "connected"' in first
+        assert first.startswith("data: ")
+    finally:
+        await gen.aclose()
+        sse_client_queues.clear()
+
+
+async def test_sse_message_delivery():
+    """SSE generator yields messages placed on the queue."""
+    from app.api import sse_endpoint, sse_client_queues
+
+    mock_request = MagicMock()
+    response = await sse_endpoint(mock_request)
+    gen = response.body_iterator
+
+    try:
+        # consume connected message
+        await gen.__anext__()
+
+        # find the queue that was registered
+        queue = sse_client_queues[-1]
+        await queue.put('{"event": "test_msg"}')
+
+        msg = await gen.__anext__()
+        assert msg == 'data: {"event": "test_msg"}\n\n'
+    finally:
+        await gen.aclose()
+        sse_client_queues.clear()
+
+
+async def test_sse_keepalive_on_timeout():
+    """SSE generator yields keep-alive comment when queue.get times out."""
+    from app.api import sse_endpoint, sse_client_queues
+
+    mock_request = MagicMock()
+    response = await sse_endpoint(mock_request)
+    gen = response.body_iterator
+
+    try:
+        await gen.__anext__()  # connected message
+
+        with patch("app.api.asyncio.wait_for", new_callable=AsyncMock, side_effect=asyncio.TimeoutError):
+            keepalive = await gen.__anext__()
+
+        assert keepalive == ": keep-alive\n\n"
+    finally:
+        await gen.aclose()
+        sse_client_queues.clear()
+
+
+async def test_sse_cleanup_on_cancel():
+    """SSE generator removes queue from sse_client_queues on CancelledError."""
+    from app.api import sse_endpoint, sse_client_queues
+
+    mock_request = MagicMock()
+    response = await sse_endpoint(mock_request)
+    gen = response.body_iterator
+
+    await gen.__anext__()  # connected message
+
+    queue = sse_client_queues[-1]
+    assert queue in sse_client_queues
+
+    # Put a message so the generator advances past the first yield into the while loop,
+    # then throw CancelledError which triggers the except/finally cleanup.
+    await queue.put("dummy")
+    await gen.__anext__()  # consume the dummy message
+
+    try:
+        await gen.athrow(asyncio.CancelledError)
+    except (StopAsyncIteration, asyncio.CancelledError):
+        pass
+
+    assert queue not in sse_client_queues

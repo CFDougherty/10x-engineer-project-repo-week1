@@ -3,8 +3,12 @@
 These tests verify search functionality across different fields and edge cases.
 """
 
+import uuid
 import pytest
+from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
+
+from app.models import Prompt
 
 class TestSearchPrompts:
     """Tests for the search field functionality covering title, description, tags, and collection filters.
@@ -559,3 +563,109 @@ class TestSearchEdgeCases:
         resp = client.get("/prompts?search=xyz&filter=title&fuzzy=false")
         assert resp.status_code == 200
         assert resp.json()["prompts"] == []
+
+
+class TestSemanticSearchErrors:
+    """Tests for semantic search error handling."""
+
+    def test_semantic_search_503_when_embedding_fails(self, client: TestClient):
+        """GET /prompts?semantic=true must return 503 when embedding generation raises RuntimeError.
+
+        The agenerate_query_embedding function is patched to simulate a model-unavailable error.
+        """
+        from unittest.mock import patch, AsyncMock
+
+        with patch(
+            "app.embeddings.agenerate_query_embedding",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("model not loaded"),
+        ):
+            resp = client.get("/prompts?semantic=true&search=test+query")
+
+        assert resp.status_code == 503
+        assert "unavailable" in resp.json()["detail"].lower()
+
+
+class TestSemanticSearchSuccess:
+    """Tests for the semantic search happy path (api.py L234-256)."""
+
+    def test_semantic_search_returns_results(self, client: TestClient):
+        """Successful semantic search returns prompts, total, and next_cursor."""
+        fake_prompts = [
+            Prompt(id=str(uuid.uuid4()), title="Prompt A", content="content a"),
+            Prompt(id=str(uuid.uuid4()), title="Prompt B", content="content b"),
+        ]
+
+        with (
+            patch("app.embeddings.agenerate_query_embedding", new_callable=AsyncMock, return_value=[0.1] * 384),
+            patch.object(
+                __import__("app.storage", fromlist=["storage"]).storage,
+                "semantic_search", new_callable=AsyncMock, return_value=fake_prompts,
+            ),
+            patch.object(
+                __import__("app.storage", fromlist=["storage"]).storage,
+                "count_semantic_results", new_callable=AsyncMock, return_value=5,
+            ),
+        ):
+            resp = client.get("/prompts?semantic=true&search=test+query")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["prompts"]) == 2
+        assert data["total"] == 5
+        assert data["next_cursor"] == "2"
+
+    def test_semantic_search_last_page_no_cursor(self, client: TestClient):
+        """When all results fit on one page, next_cursor is null."""
+        fake_prompts = [
+            Prompt(id=str(uuid.uuid4()), title="Only One", content="content"),
+        ]
+
+        with (
+            patch("app.embeddings.agenerate_query_embedding", new_callable=AsyncMock, return_value=[0.1] * 384),
+            patch.object(
+                __import__("app.storage", fromlist=["storage"]).storage,
+                "semantic_search", new_callable=AsyncMock, return_value=fake_prompts,
+            ),
+            patch.object(
+                __import__("app.storage", fromlist=["storage"]).storage,
+                "count_semantic_results", new_callable=AsyncMock, return_value=1,
+            ),
+        ):
+            resp = client.get("/prompts?semantic=true&search=test+query")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["next_cursor"] is None
+
+    def test_semantic_search_with_collection_id(self, client: TestClient):
+        """Semantic search forwards collection_id to storage."""
+        from app.storage import storage as _storage
+
+        col_id = str(uuid.uuid4())
+        fake_prompts = [
+            Prompt(id=str(uuid.uuid4()), title="P1", content="content", collection_id=col_id),
+        ]
+
+        mock_search = AsyncMock(return_value=fake_prompts)
+        mock_count = AsyncMock(return_value=1)
+
+        with (
+            patch("app.embeddings.agenerate_query_embedding", new_callable=AsyncMock, return_value=[0.1] * 384),
+            patch.object(_storage, "semantic_search", mock_search),
+            patch.object(_storage, "count_semantic_results", mock_count),
+        ):
+            resp = client.get(f"/prompts?semantic=true&search=test&collection_id={col_id}")
+
+        assert resp.status_code == 200
+        mock_search.assert_called_once()
+        assert mock_search.call_args.kwargs["collection_id"] == col_id
+        mock_count.assert_called_once()
+        assert mock_count.call_args.kwargs["collection_id"] == col_id
+
+    def test_semantic_search_empty_search_falls_through(self, client: TestClient):
+        """semantic=true with empty search falls through to lexical path."""
+        resp = client.get("/prompts?semantic=true&search=")
+        assert resp.status_code == 200
+        # Should return normal lexical results (empty DB = 0 prompts)
+        assert "prompts" in resp.json()

@@ -6,8 +6,8 @@ and handle edge cases appropriately.
 
 import pytest
 from datetime import datetime, timedelta
-from typing import List
-from app.models import Prompt
+from unittest.mock import AsyncMock, patch
+from app.models import Collection, Prompt
 from app.utils import (
     sort_prompts_by_date,
     filter_prompts_by_collection,
@@ -899,6 +899,155 @@ class TestFuzzySearchEdgeCases:
         results = await search_prompts(prompts, "unique-desc-term", fuzzy=False, search_field="all")
         assert len(results) == 1
         assert results[0].description == "unique-desc-term"
+
+
+class TestSearchPromptsCollectionField:
+    """Tests for search_prompts with search_field='collection'."""
+
+    async def test_fuzzy_collection_search_matches_by_name(self):
+        """Fuzzy search on 'collection' field matches prompts whose collection name contains the query."""
+        col = Collection(id="col-1", name="Machine Learning")
+        prompt_in = Prompt(title="P1", content="content", collection_id="col-1")
+        prompt_out = Prompt(title="P2", content="content", collection_id="col-2")
+
+        with patch("app.utils.storage") as mock_storage:
+            mock_storage.get_all_collections = AsyncMock(return_value=[col])
+            results = await search_prompts(
+                [prompt_in, prompt_out], "machine", fuzzy=True, search_field="collection"
+            )
+        assert len(results) == 1
+        assert results[0].title == "P1"
+
+    async def test_exact_collection_search_no_match(self):
+        """Exact search on 'collection' returns empty when no prompt matches."""
+        col = Collection(id="col-1", name="DevOps")
+        prompt = Prompt(title="P1", content="content", collection_id="col-1")
+
+        with patch("app.utils.storage") as mock_storage:
+            mock_storage.get_all_collections = AsyncMock(return_value=[col])
+            results = await search_prompts(
+                [prompt], "machine", fuzzy=False, search_field="collection"
+            )
+        assert len(results) == 0
+
+    async def test_collection_search_prompt_with_no_collection_id(self):
+        """Prompts with no collection_id are excluded from collection-field search."""
+        col = Collection(id="col-1", name="Python")
+        prompt = Prompt(title="P1", content="content")  # no collection_id
+
+        with patch("app.utils.storage") as mock_storage:
+            mock_storage.get_all_collections = AsyncMock(return_value=[col])
+            results = await search_prompts(
+                [prompt], "python", fuzzy=False, search_field="collection"
+            )
+        assert len(results) == 0
+
+    async def test_search_all_includes_collection_lookup(self):
+        """search_prompts with search_field=None triggers collection name lookup."""
+        col = Collection(id="col-1", name="UniqueCollectionName")
+        prompt = Prompt(title="Unrelated", content="unrelated", collection_id="col-1")
+
+        with patch("app.utils.storage") as mock_storage:
+            mock_storage.get_all_collections = AsyncMock(return_value=[col])
+            results = await search_prompts(
+                [prompt], "uniquecollection", fuzzy=False, search_field=None
+            )
+        assert len(results) == 1
+
+    async def test_fuzzy_search_score_below_threshold_excluded(self):
+        """A fuzzy match with a score below 30 must be filtered out.
+
+        score = 100 * weight - (start * 2) - (dist * 5)
+        With content weight=1.0, start=40, dist=0: 100 - 80 = 20 < 30 → excluded.
+        """
+        long_content = "x" * 40 + "needle"
+        prompt = Prompt(title="unrelated", content=long_content)
+
+        with patch("app.utils.storage") as mock_storage:
+            mock_storage.get_all_collections = AsyncMock(return_value=[])
+            results = await search_prompts([prompt], "needle", fuzzy=True, search_field="content")
+
+        assert len(results) == 0
+
+    async def test_fuzzy_search_score_at_threshold_included(self):
+        """A fuzzy match with score exactly 30 must be included.
+
+        score = 100 * 1.0 - (35 * 2) - (0 * 5) = 30.
+        """
+        content = "x" * 35 + "needle"
+        prompt = Prompt(title="unrelated", content=content)
+
+        with patch("app.utils.storage") as mock_storage:
+            mock_storage.get_all_collections = AsyncMock(return_value=[])
+            results = await search_prompts([prompt], "needle", fuzzy=True, search_field="content")
+
+        assert len(results) == 1
+
+
+class TestSearchPromptsFieldFilters:
+    """Tests covering the individual search_field branches and near-match fuzzy path."""
+
+    async def test_search_field_title_returns_only_title_matches(self):
+        """search_field='title' searches only the title field."""
+        p_match = Prompt(title="Python Guide", content="c", description="nothing")
+        p_no_match = Prompt(title="Unrelated", content="c", description="Python here")
+
+        results = await search_prompts(
+            [p_match, p_no_match], "python", fuzzy=False, search_field="title"
+        )
+        assert len(results) == 1
+        assert results[0].title == "Python Guide"
+
+    async def test_search_field_content_matches_content(self):
+        """search_field='content' with fuzzy=False matches via content (covers content match=True branch)."""
+        p_match = Prompt(title="No match in title", content="python programming guide")
+        p_no_match = Prompt(title="Unrelated", content="javascript tutorial")
+
+        results = await search_prompts(
+            [p_match, p_no_match], "python", fuzzy=False, search_field="content"
+        )
+        assert len(results) == 1
+        assert results[0].title == "No match in title"
+
+    async def test_search_field_description_returns_only_description_matches(self):
+        """search_field='description' searches only the description field."""
+        p_match = Prompt(title="Unrelated", content="c", description="deep learning topic")
+        p_no_match = Prompt(title="deep learning", content="c", description="unrelated")
+
+        results = await search_prompts(
+            [p_match, p_no_match], "deep learning", fuzzy=False, search_field="description"
+        )
+        assert len(results) == 1
+        assert results[0].title == "Unrelated"
+
+    async def test_exact_search_description_match_when_title_content_miss(self):
+        """fuzzy=False all-fields search matches a prompt via description when title/content miss."""
+        prompt = Prompt(title="Unrelated", content="c", description="rare description text")
+
+        with patch("app.utils.storage") as mock_storage:
+            mock_storage.get_all_collections = AsyncMock(return_value=[])
+            results = await search_prompts([prompt], "rare description", fuzzy=False)
+
+        assert len(results) == 1
+
+    async def test_fuzzy_tags_field_matches_tag_text(self):
+        """fuzzy=True with search_field='tags' matches prompts whose tags contain the query."""
+        p_match = Prompt(title="P1", content="c", tags=["machine-learning", "python"])
+        p_no_match = Prompt(title="P2", content="c", tags=["javascript"])
+
+        results = await search_prompts(
+            [p_match, p_no_match], "machine", fuzzy=True, search_field="tags"
+        )
+        assert len(results) == 1
+        assert results[0].title == "P1"
+
+    async def test_fuzzy_near_matches_path_used_for_typo_query(self):
+        """fuzzy=True uses fuzzysearch near_matches when exact substring not found (typo query)."""
+        # "Pythn" is not an exact substring of "python guide" but fuzzy allows dist ≤ 2
+        prompt = Prompt(title="Python Guide", content="c")
+
+        results = await search_prompts([prompt], "Pythn", fuzzy=True, search_field="title")
+        assert len(results) == 1
 
 
 if __name__ == "__main__":

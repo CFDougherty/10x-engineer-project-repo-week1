@@ -197,3 +197,30 @@ class TestAPIContract:
         """
         resp = client.delete("/collections/does-not-exist")
         assert resp.status_code == 404
+
+    def test_post_prompts_wrong_content_type_returns_415(self, client: TestClient):
+        """POST /prompts with a non-JSON Content-Type must return 415 Unsupported Media Type.
+
+        The content-type validation middleware only allows application/json.
+        """
+        resp = client.post(
+            "/prompts",
+            content="title=Test&content=Content",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert resp.status_code == 415
+
+    def test_post_prompts_plain_text_content_type_returns_415(self, client: TestClient):
+        """POST /prompts with Content-Type: text/plain must return 415."""
+        resp = client.post(
+            "/prompts",
+            content="some plain text",
+            headers={"Content-Type": "text/plain"},
+        )
+        assert resp.status_code == 415
+
+    def test_invalid_cursor_returns_400(self, client: TestClient):
+        """GET /prompts with a malformed cursor must return 400 Bad Request."""
+        resp = client.get("/prompts?cursor=!!!not-valid-base64!!!")
+        assert resp.status_code == 400
+        assert "cursor" in resp.json()["detail"].lower() or "invalid" in resp.json()["detail"].lower()

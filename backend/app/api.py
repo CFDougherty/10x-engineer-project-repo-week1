@@ -666,16 +666,23 @@ async def sse_endpoint(request: Request):
 
     async def event_stream():
         yield 'data: {"event": "connected", "message": "Connected to SSE stream"}\n\n'
+        get_task = None
         try:
             while True:
                 try:
-                    message = await asyncio.wait_for(queue.get(), timeout=15)
+                    get_task = asyncio.ensure_future(queue.get())
+                    message = await asyncio.wait_for(asyncio.shield(get_task), timeout=15)
+                    get_task = None
                     yield f'data: {message}\n\n'
                 except asyncio.TimeoutError:
+                    get_task.cancel()
+                    get_task = None
                     yield ': keep-alive\n\n'
         except asyncio.CancelledError:
             pass
         finally:
+            if get_task is not None:
+                get_task.cancel()
             if queue in sse_client_queues:
                 sse_client_queues.remove(queue)
 
