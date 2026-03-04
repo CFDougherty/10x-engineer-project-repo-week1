@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Callable, List, Optional, Tuple
 
-from sqlalchemy import func as sa_func, select, delete, update, or_, and_, text
+from sqlalchemy import func as sa_func, select, delete, update, or_, and_, text, Float
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.database import AsyncSessionLocal
@@ -25,6 +25,9 @@ from app.models_db import PromptDB, CollectionDB, PromptVersionDB, PromptMetaDB
 # ---------------------------------------------------------------------------
 
 CONTENT_PREVIEW_LEN = 300
+
+# Cosine distance cutoff for semantic search (pgvector <=> operator, range 0–2).
+SEMANTIC_DISTANCE_THRESHOLD = 0.82
 
 
 # ---------------------------------------------------------------------------
@@ -533,17 +536,20 @@ class Storage:
         limit: int = 20,
         offset: int = 0,
         collection_id: Optional[str] = None,
+        threshold: float = SEMANTIC_DISTANCE_THRESHOLD,
     ) -> List[Prompt]:
         """Return prompts ordered by cosine similarity to query_embedding.
 
-        Only prompts with a non-NULL embedding are considered.
-        The <=> operator is pgvector cosine distance; ascending = most similar first.
+        Only prompts with a non-NULL embedding and cosine distance strictly less
+        than ``threshold`` are returned. The <=> operator is pgvector cosine
+        distance; ascending = most similar first.
         """
         async with AsyncSessionLocal() as session:
             stmt = (
                 select(PromptDB)
                 .where(PromptDB.embedding.isnot(None))
-                .order_by(PromptDB.embedding.op("<=>")(query_embedding))
+                .where(PromptDB.embedding.op("<=>", return_type=Float)(query_embedding) < threshold)
+                .order_by(PromptDB.embedding.op("<=>", return_type=Float)(query_embedding))
             )
             if collection_id:
                 stmt = stmt.where(PromptDB.collection_id == collection_id)
@@ -553,9 +559,28 @@ class Storage:
 
     async def count_semantic_results(
         self,
+        query_embedding: List[float],
+        collection_id: Optional[str] = None,
+        threshold: float = SEMANTIC_DISTANCE_THRESHOLD,
+    ) -> int:
+        """Count prompts whose cosine distance to query_embedding is below threshold."""
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(sa_func.count())
+                .select_from(PromptDB)
+                .where(PromptDB.embedding.isnot(None))
+                .where(PromptDB.embedding.op("<=>", return_type=Float)(query_embedding) < threshold)
+            )
+            if collection_id:
+                stmt = stmt.where(PromptDB.collection_id == collection_id)
+            result = await session.execute(stmt)
+            return result.scalar_one()
+
+    async def count_embedded_prompts(
+        self,
         collection_id: Optional[str] = None,
     ) -> int:
-        """Count prompts that have an embedding (optionally filtered by collection)."""
+        """Count prompts with a non-NULL embedding. Used by /admin/embedding-status."""
         async with AsyncSessionLocal() as session:
             stmt = (
                 select(sa_func.count())

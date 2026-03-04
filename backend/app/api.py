@@ -200,7 +200,10 @@ async def list_prompts(
             offset=_offset,
             collection_id=collection_id,
         )
-        total = await storage.count_semantic_results(collection_id=collection_id)
+        total = await storage.count_semantic_results(
+            query_embedding=query_embedding,
+            collection_id=collection_id,
+        )
         next_offset = _offset + len(results)
         next_cursor_val = str(next_offset) if next_offset < total else None
         return PromptList(prompts=results, total=total, next_cursor=next_cursor_val)
@@ -941,7 +944,7 @@ async def embedding_status():
     """
     all_prompts = await storage.get_all_prompts()
     total = len(all_prompts)
-    embedded = await storage.count_semantic_results()
+    embedded = await storage.count_embedded_prompts()
     return {"total": total, "embedded": embedded, "complete": total == 0 or embedded == total}
 
 
