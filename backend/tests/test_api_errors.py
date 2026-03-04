@@ -41,20 +41,22 @@ class TestDetailedErrorCases:
         assert response.status_code == 400
 
     def test_xss_attempt(self, client: TestClient):
-        """XSS payloads must be sanitized before storage and must not appear in the response.
+        """XSS payloads are stored as plain text and returned faithfully.
+        React's JSX auto-escaping prevents XSS at render time — no server-side
+        HTML escaping is needed or applied.
 
         Args:
             client: TestClient instance for making API requests.
         """
         xss_data = {
             "title": "<script>alert('xss')</script>",
-            "content": "<img src=x onerror=alert(1)>"
+            "content": "<img src=x onerror=alert(1)>",
         }
         response = client.post("/prompts", json=xss_data)
         assert response.status_code == 201
         data = response.json()
-        assert "<script>" not in data["title"]
-        assert "<img" not in data["content"]
+        assert data["title"] == xss_data["title"]
+        assert data["content"] == xss_data["content"]
 
 class TestAPIResponseFormat:
     """Tests for API response format consistency."""
@@ -177,12 +179,9 @@ class TestHTTPMethodBehavior:
         resp = client.get("/prompts/nonexistent/versions")
         assert resp.status_code == 404
 
-    def test_html_xss_sanitized_in_response(self, client: TestClient):
-        """XSS payloads in input must be HTML-escaped in the stored and returned data.
-
-        Note:
-            Verifies that HTML entities such as '&lt;' appear in the response title,
-            confirming active sanitization rather than simple rejection.
+    def test_html_content_stored_as_plaintext(self, client: TestClient):
+        """HTML content in input is stored and returned as plain text, not HTML-escaped.
+        The API is a JSON REST service; React handles display safety via JSX auto-escaping.
 
         Args:
             client: TestClient instance for making API requests.
@@ -193,9 +192,9 @@ class TestHTTPMethodBehavior:
         })
         assert resp.status_code == 201
         data = resp.json()
-        assert "<script>" not in data["title"]
-        assert "<img" not in data["content"]
-        assert "&lt;" in data["title"]
+        assert data["title"] == "<script>alert('xss')</script>"
+        assert data["content"] == "<img src=x onerror=alert(1)>"
+        assert "&lt;" not in data["title"]
 
     def test_sql_injection_in_content_is_rejected(self, client: TestClient):
         """SQL injection patterns in the title must be rejected by the validator with 400.

@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from uuid import uuid4, UUID
-import html
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +19,7 @@ def sanitize_html(text: str) -> str:
     """
     if not isinstance(text, str):
         return text
-    return html.escape(text)
+    return text  # React handles display escaping; html.escape() causes entity artifacts in the UI
 
 def generate_id() -> str:
     """Generate a UUID4 identifier string.

@@ -431,37 +431,33 @@ class TestModelValidationWithInvalidTypes:
             Collection(name="Test", created_at="invalid")
 
 
-class TestHTMLSanitizationEdgeCases:
-    """Verify HTML sanitization is applied exactly once and not double-escaped."""
+class TestHTMLContentHandling:
+    """Verify HTML content is stored as plain text and not corrupted by escaping."""
 
-    def test_html_tags_escaped_in_title(self):
-        """HTML in title must be escaped to entities."""
+    def test_html_tags_preserved_in_title(self):
+        """HTML in title is stored as plain text — not escaped to entities.
+        React handles display safety via JSX auto-escaping."""
         p = Prompt(title="<b>bold</b>", content="content")
-        assert "<b>" not in p.title
-        assert "&lt;b&gt;" in p.title
+        assert p.title == "<b>bold</b>"
 
-    def test_html_sanitization_not_double_escaped(self):
-        """HTML must be escaped once — the result must not itself be re-escaped.
-
-        Note:
-            Single-escaped result: ``&lt;b&gt;bold&lt;/b&gt;``
-            Double-escaped result would be: ``&amp;lt;b&amp;gt;...`` — this must NOT occur.
-        """
+    def test_plain_html_not_corrupted(self):
+        """HTML content must not be corrupted (escaped, encoded, or otherwise modified)."""
         p = Prompt(title="<b>bold</b>", content="content")
         assert "&amp;" not in p.title
+        assert "&lt;" not in p.title
+        assert p.title == "<b>bold</b>"
 
-    def test_html_tags_escaped_in_description(self):
-        """HTML in description must be escaped."""
+    def test_html_tags_preserved_in_description(self):
+        """HTML in description is stored as plain text — not escaped to entities."""
         p = Prompt(
             title="title",
             content="content",
             description="<script>alert('xss')</script>",
         )
-        assert "<script>" not in p.description
-        assert "&lt;script&gt;" in p.description
+        assert p.description == "<script>alert('xss')</script>"
 
     def test_plain_text_content_unaffected(self):
-        """Plain text without HTML should pass through sanitization unchanged."""
+        """Plain text without HTML should pass through unchanged."""
         p = Prompt(title="Plain Title", content="Just plain text with no HTML")
         assert p.title == "Plain Title"
         assert p.content == "Just plain text with no HTML"

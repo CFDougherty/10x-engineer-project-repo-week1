@@ -738,16 +738,15 @@ async def _do_populate(request: PopulateTestDataRequest) -> None:
                 if request.tag_as_test_fill:
                     tags.append("test fill")
 
-                # Use the first sentence of content as description
-                first_sentence = content.split(".")[0].strip()
-                description = (first_sentence + ".") if first_sentence and not first_sentence.endswith(".") else first_sentence
+                instruction = sample.get("instruction", "")
+                description = instruction[:490] if instruction else None
 
                 try:
                     created_prompts.append(Prompt(
                         id=str(uuid.uuid4()),
                         title=title[:190],
                         content=content,
-                        description=description[:490] if description else None,
+                        description=description,
                         tags=list(set(tags)),
                     ))
                 except ValidationError as exc:

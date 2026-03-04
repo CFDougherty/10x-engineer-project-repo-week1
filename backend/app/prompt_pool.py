@@ -51,6 +51,7 @@ class PromptPool:
                 "title": _truncate_title(r["instruction"]),
                 "content": _format_content(r),
                 "category": r.get("category", ""),
+                "instruction": r["instruction"],
             }
             for r in ds
         ]
