@@ -937,18 +937,19 @@ async def _do_populate(request: PopulateTestDataRequest) -> None:
 
         _populate_progress["prompts_created"] = len(created_prompts)
         _populate_progress["collections_created"] = len(created_collections)
-        _populate_progress["phase"] = "done"
-        _populate_progress["active"] = False
-
         # Notify clients about data change
         await notify_sse_clients('{"event": "data_changed", "message": "Test data populated", "action": "populate"}')
 
-        # ── Phase 5: parallel embedding backfill (uses all CPU cores via thread pool) ──
+        # ── Phase 5: embedding backfill ──
+        _populate_progress["phase"] = "embeddings"
         try:
             from app.embeddings import generate_embedding
             await storage.backfill_embeddings(generate_fn=generate_embedding)
-        except Exception:
-            pass  # Model may not be available; EmbeddingStatusBar handles retries
+        except Exception as e:
+            logging.getLogger(__name__).warning("Embedding backfill failed: %s", e)
+
+        _populate_progress["phase"] = "done"
+        _populate_progress["active"] = False
 
     except Exception as e:
         _populate_progress["active"] = False

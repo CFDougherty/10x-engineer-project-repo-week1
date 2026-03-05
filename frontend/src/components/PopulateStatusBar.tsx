@@ -80,6 +80,7 @@ export default function PopulateStatusBar() {
     versioning: 'Creating versions…',
     collections: 'Creating collections…',
     assigning: 'Assigning to collections…',
+    embeddings: 'Generating embeddings…',
     done: 'Finalizing…',
   };
   const phaseLabel = (status.phase && phaseLabels[status.phase]) ?? 'Generating prompts…';

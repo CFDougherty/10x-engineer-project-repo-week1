@@ -642,39 +642,46 @@ class Storage:
                 )
             await session.commit()
 
-    async def backfill_embeddings(self, generate_fn: Callable, chunk_size: int = 200) -> int:
+    async def backfill_embeddings(self, generate_fn: Callable, chunk_size: int = 50) -> int:
         """Generate embeddings for all prompts where embedding IS NULL.
 
         generate_fn: sync callable (title, content, description) -> List[float].
         Returns count of prompts updated. Idempotent — skips already-embedded prompts.
-        Processes in chunks of chunk_size and commits after each chunk so that
-        the /admin/embedding-status endpoint reflects live progress.
+        Processes in paginated chunks of chunk_size and commits after each chunk so
+        that the /admin/embedding-status endpoint reflects live progress.
+        Uses small batch sizes to keep memory usage low on constrained systems.
         """
-        async with AsyncSessionLocal() as session:
-            result = await session.execute(
-                select(PromptDB).where(PromptDB.embedding.is_(None))
-            )
-            rows = result.scalars().all()
-
-        if not rows:
-            return 0
-
         loop = asyncio.get_event_loop()
         total_updated = 0
+        offset = 0
 
-        for i in range(0, len(rows), chunk_size):
-            chunk = rows[i : i + chunk_size]
-            items = [(r.title, r.content, r.description) for r in chunk]
+        while True:
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    select(PromptDB)
+                    .where(PromptDB.embedding.is_(None))
+                    .order_by(PromptDB.id)
+                    .limit(chunk_size)
+                    .offset(offset)
+                )
+                rows = result.scalars().all()
+
+            if not rows:
+                break
+
+            items = [(r.title, r.content, r.description) for r in rows]
 
             try:
                 from app.embeddings import generate_embeddings_batch
-                vecs: list = await loop.run_in_executor(None, generate_embeddings_batch, items)
-                good = list(zip([r.id for r in chunk], vecs))
+                vecs: list = await loop.run_in_executor(
+                    None, generate_embeddings_batch, items, 16,
+                )
+                good = list(zip([r.id for r in rows], vecs))
             except Exception as exc:
                 # Fall back to per-item if batch function unavailable
                 logging.getLogger(__name__).warning("Batch embed failed (%s); falling back to per-item", exc)
                 good = []
-                for row, item in zip(chunk, items):
+                for row, item in zip(rows, items):
                     try:
                         vec = await loop.run_in_executor(None, generate_fn, *item)
                         good.append((row.id, vec))
@@ -683,6 +690,14 @@ class Storage:
 
             await self.batch_set_embeddings(good)  # commits to DB; status endpoint sees updated count
             total_updated += len(good)
+
+            # If all rows in this page got embeddings, the next page starts at offset 0
+            # because the WHERE clause filters out already-embedded rows.
+            # If some failed, advance offset to skip them.
+            if len(good) == len(rows):
+                offset = 0
+            else:
+                offset += chunk_size
 
         return total_updated
 
