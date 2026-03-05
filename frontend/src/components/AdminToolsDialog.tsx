@@ -17,6 +17,10 @@ interface AdminToolsDialogProps {
   onClose: () => void;
 }
 
+const MAX_PROMPTS = 10_000;
+const MAX_COLLECTIONS = 1_000;
+const MAX_TAGS = 500;
+
 const AdminToolsDialog: React.FC<AdminToolsDialogProps> = ({ open, onClose }) => {
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [actionType, setActionType] = useState<'populate' | 'clear' | 'clearTest' | null>(null);
@@ -119,7 +123,7 @@ const AdminToolsDialog: React.FC<AdminToolsDialogProps> = ({ open, onClose }) =>
                 type="number"
                 size="small"
                 value={numPrompts}
-                onChange={e => setNumPrompts(Math.max(1, parseInt(e.target.value) || 1))}
+                onChange={e => setNumPrompts(Math.min(MAX_PROMPTS, Math.max(1, parseInt(e.target.value) || 1)))}
                 disabled={isLoading}
               />
               <TextField
@@ -127,7 +131,7 @@ const AdminToolsDialog: React.FC<AdminToolsDialogProps> = ({ open, onClose }) =>
                 type="number"
                 size="small"
                 value={numCollections}
-                onChange={e => setNumCollections(Math.max(0, parseInt(e.target.value) || 0))}
+                onChange={e => setNumCollections(Math.min(MAX_COLLECTIONS, Math.max(0, parseInt(e.target.value) || 0)))}
                 disabled={isLoading}
               />
               <TextField
@@ -135,7 +139,7 @@ const AdminToolsDialog: React.FC<AdminToolsDialogProps> = ({ open, onClose }) =>
                 type="number"
                 size="small"
                 value={tagsPerPrompt}
-                onChange={e => setTagsPerPrompt(Math.max(0, parseInt(e.target.value) || 0))}
+                onChange={e => setTagsPerPrompt(Math.min(MAX_TAGS, Math.max(0, parseInt(e.target.value) || 0)))}
                 disabled={isLoading}
               />
               <TextField

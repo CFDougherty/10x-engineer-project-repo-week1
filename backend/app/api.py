@@ -46,7 +46,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from typing import Literal, Optional
+from typing import ClassVar, Literal, Optional
 
 from app.models import (
     Prompt, PromptCreate, PromptUpdate, PromptUpdateOptional,
@@ -699,7 +699,7 @@ async def sse_endpoint(request: Request):
 
 # ============== Admin Endpoints ==============
 
-from pydantic import BaseModel as _BaseModel, ValidationError
+from pydantic import BaseModel as _BaseModel, ValidationError, field_validator
 
 class PopulateTestDataRequest(_BaseModel):
     num_prompts: int = 40
@@ -710,6 +710,25 @@ class PopulateTestDataRequest(_BaseModel):
     tag_as_test_fill: bool = False
     append_mode: bool = False
     data_source: Literal["template", "dataset"] = "dataset"
+
+    MAX_PROMPTS: ClassVar[int] = 10_000
+    MAX_COLLECTIONS: ClassVar[int] = 1_000
+    MAX_TAGS_PER_PROMPT: ClassVar[int] = 500
+
+    @field_validator("num_prompts")
+    @classmethod
+    def clamp_prompts(cls, v: int) -> int:
+        return min(max(v, 0), cls.MAX_PROMPTS)
+
+    @field_validator("num_collections")
+    @classmethod
+    def clamp_collections(cls, v: int) -> int:
+        return min(max(v, 0), cls.MAX_COLLECTIONS)
+
+    @field_validator("tags_per_prompt")
+    @classmethod
+    def clamp_tags(cls, v: int) -> int:
+        return min(max(v, 0), cls.MAX_TAGS_PER_PROMPT)
 
 _populate_progress: dict = {"current": 0, "total": 0, "active": False, "error": None}
 
