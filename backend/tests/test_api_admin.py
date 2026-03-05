@@ -233,7 +233,8 @@ async def test_embedding_status_with_unembedded_prompt():
     """GET /admin/embedding-status reports complete=False when some prompts lack embeddings."""
     await storage.clear()
     p = Prompt(id=str(uuid.uuid4()), title="No Embedding", content="content")
-    await storage.create_prompt(p)
+    with patch("app.embeddings.agenerate_embedding", side_effect=RuntimeError("disabled")):
+        await storage.create_prompt(p)
 
     response = client.get("/admin/embedding-status")
     assert response.status_code == 200

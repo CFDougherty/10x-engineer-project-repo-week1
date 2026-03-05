@@ -979,6 +979,7 @@ class TestBatchOperations:
     async def test_count_embedded_prompts_with_collection_filter(self):
         """count_embedded_prompts must count only prompts in the given collection."""
         from app.models import Collection
+        from unittest.mock import patch
         s = Storage()
 
         col = Collection(name="Col1")
@@ -986,8 +987,9 @@ class TestBatchOperations:
 
         p1 = Prompt(title="In Col", content="c", collection_id=col.id)
         p2 = Prompt(title="No Col", content="c")
-        await s.create_prompt(p1)
-        await s.create_prompt(p2)
+        with patch("app.embeddings.agenerate_embedding", side_effect=RuntimeError("disabled")):
+            await s.create_prompt(p1)
+            await s.create_prompt(p2)
 
         count_all = await s.count_embedded_prompts()
         count_col = await s.count_embedded_prompts(collection_id=col.id)
@@ -1048,7 +1050,8 @@ class TestBackfillEmbeddings:
         s = Storage()
 
         p = Prompt(title="Need Embed", content="content")
-        await s.create_prompt(p)
+        with patch("app.embeddings.agenerate_embedding", side_effect=RuntimeError("disabled")):
+            await s.create_prompt(p)
 
         fake_vec = [0.1] * 384
 
@@ -1066,7 +1069,8 @@ class TestBackfillEmbeddings:
         s = Storage()
 
         p = Prompt(title="Batchable", content="some content")
-        await s.create_prompt(p)
+        with patch("app.embeddings.agenerate_embedding", side_effect=RuntimeError("disabled")):
+            await s.create_prompt(p)
 
         fake_vec = [0.2] * 384
 
