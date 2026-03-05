@@ -138,7 +138,10 @@ docker-compose up --build
 
 - **Web UI (port 3000):** nginx HTTP Basic Auth — browser shows a username/password dialog. Username is `admin`, password is your `API_KEY`.
 - **Backend API (port 8000):** every request must include the header `X-API-Key: <your-key>`. The frontend sends this automatically (key is baked in at build time).
-- The `/health` endpoint is always public (required for Docker health checks).
+- The following endpoints are always public (no key required):
+  - `/health` — Docker health checks
+  - `/docs` — Swagger UI (interactive API explorer)
+  - `/openapi.json` — OpenAPI specification
 - Leaving `API_KEY` empty disables all auth (dev/test mode).
 
 ### Making authenticated API calls

@@ -17,7 +17,15 @@ Authentication is controlled by the `API_KEY` environment variable on the backen
 - **Disabled (default):** Leave `API_KEY` empty. All requests pass through — suitable for local development and testing.
 - **Enabled:** Set `API_KEY` to a strong random value. Every request must include the matching key.
 
-### Required header (all endpoints except `/health`)
+### Public endpoints (no key required)
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Docker health checks |
+| `GET /docs` | Swagger UI (interactive API explorer with Authorize button) |
+| `GET /openapi.json` | OpenAPI specification |
+
+### Required header (all other endpoints)
 
 ```
 X-API-Key: <your-api-key>

@@ -21,8 +21,12 @@ Note:
 
 Authentication:
     When the ``API_KEY`` environment variable is set, all endpoints require an
-    ``X-API-Key`` header matching that value. The ``/health`` endpoint is always
-    public so Docker health checks continue to work.
+    ``X-API-Key`` header matching that value. The following endpoints are always
+    public (no key required):
+
+    - ``/health`` — Docker health checks
+    - ``/docs`` — Swagger UI
+    - ``/openapi.json`` — OpenAPI specification
 
     For the SSE endpoint (``/admin/events``), which uses the native
     ``EventSource`` API that cannot send custom headers, pass the key as a
@@ -45,6 +49,7 @@ from fastapi import FastAPI, HTTPException, Body, Request, status, BackgroundTas
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
+from fastapi.openapi.utils import get_openapi
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import ClassVar, Literal, Optional
 
@@ -75,7 +80,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         expected = get_settings().api_key
         if not expected:
             return await call_next(request)
-        if request.url.path == "/health":
+        if request.url.path in ("/health", "/docs", "/openapi.json"):
             return await call_next(request)
         key = request.headers.get("X-API-Key") or request.query_params.get("api_key")
         if not key or not secrets.compare_digest(key.encode(), expected.encode()):
@@ -101,7 +106,36 @@ app = FastAPI(
     description="AI Prompt Engineering Platform",
     version=__version__,
     lifespan=lifespan,
+    redoc_url=None,
 )
+
+def custom_openapi():
+    """Add API key security scheme so Swagger UI shows an Authorize button."""
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    schema.setdefault("components", {})["securitySchemes"] = {
+        "APIKeyHeader": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-API-Key",
+            "description": (
+                "API key for authentication. Set via the API_KEY environment "
+                "variable on the server. Leave empty to disable auth."
+            ),
+        }
+    }
+    schema["security"] = [{"APIKeyHeader": []}]
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = custom_openapi  # type: ignore[method-assign]
 
 # Auth middleware — runs before CORS so unauthenticated requests are rejected early
 app.add_middleware(APIKeyMiddleware)
